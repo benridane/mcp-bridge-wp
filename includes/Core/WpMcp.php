@@ -23,6 +23,11 @@ class WpMcp
     private ?\WP_User $authenticatedUser = null;
 
     /**
+     * Current session ID for Streamable HTTP
+     */
+    private ?string $sessionId = null;
+
+    /**
      * Get instance
      *
      * @return self
@@ -41,7 +46,8 @@ class WpMcp
      */
     private function __construct()
     {
-        // Constructor intentionally empty
+        // Generate session ID for this instance
+        $this->sessionId = $this->generateSessionId();
     }
 
     /**
@@ -52,26 +58,59 @@ class WpMcp
      */
     public function handleRpcRequest(\WP_REST_Request $request): \WP_REST_Response
     {
-        Logger::info('Received MCP RPC request');
+        // Ensure we always have a session ID from the start
+        if (!$this->sessionId) {
+            $this->sessionId = $this->generateSessionId();
+        }
+
+        // Check for existing session ID in headers (for MCP Inspector compatibility)
+        $clientSessionId = $request->get_header('X-MCP-Session-ID');
+        if ($clientSessionId && !empty($clientSessionId)) {
+            Logger::info('Using client-provided session ID', [
+                'client_session_id' => $clientSessionId,
+                'server_session_id' => $this->sessionId
+            ]);
+            $this->sessionId = $clientSessionId;
+        }
+
+        Logger::info('Received MCP RPC request', [
+            'method_type' => $request->get_method(),
+            'content_type' => $request->get_header('Content-Type'),
+            'user_agent' => $request->get_header('User-Agent'),
+            'body_length' => strlen($request->get_body()),
+            'session_id' => $this->sessionId,
+            'client_session_id' => $clientSessionId
+        ]);
 
         try {
-            $json = json_decode($request->get_body(), true);
+            $body = $request->get_body();
+            Logger::debug('Request body received', ['body' => $body]);
             
-            if (!$json || !isset($json['method'])) {
-                throw new \Exception('Invalid JSON-RPC request format');
+            $json = json_decode($body, true);
+            
+            if (!$json) {
+                $jsonError = json_last_error_msg();
+                Logger::error('JSON decode failed', ['error' => $jsonError, 'body' => $body]);
+                throw new \Exception("Invalid JSON: {$jsonError}");
+            }
+            
+            if (!isset($json['method'])) {
+                Logger::error('Missing method in JSON-RPC request', ['json' => $json]);
+                throw new \Exception('Invalid JSON-RPC request format: missing method');
             }
 
             $method = $json['method'];
             $params = $json['params'] ?? [];
             $id = $json['id'] ?? null;
 
-            Logger::debug('Processing RPC method', [
-                'method' => $method, 
-                'params' => $params,
-                'json_body' => $request->get_body()
+            Logger::info('Processing RPC method', [
+                'method' => $method,
+                'params_keys' => array_keys($params),
+                'session_id' => $this->sessionId,
+                'request_id' => $id
             ]);
 
-            // Set the authenticated user context
+            // Set the authenticated user context if available
             if ($this->authenticatedUser) {
                 wp_set_current_user($this->authenticatedUser->ID);
                 Logger::debug('Set current user context', [
@@ -84,13 +123,42 @@ class WpMcp
 
             $result = $this->processRpcMethod($method, $params);
 
-            Logger::debug('RPC method executed successfully', ['method' => $method, 'result_type' => gettype($result)]);
+            Logger::info('RPC method executed successfully', [
+                'method' => $method, 
+                'result_type' => gettype($result),
+                'result_keys' => is_array($result) ? array_keys($result) : 'N/A',
+                'session_id' => $this->sessionId
+            ]);
 
-            return new \WP_REST_Response([
+            $response = new \WP_REST_Response([
                 'jsonrpc' => '2.0',
                 'result' => $result,
                 'id' => $id
             ], 200);
+
+            // Add CORS headers
+            $response->header('Access-Control-Allow-Origin', '*');
+            $response->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            $response->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+            $response->header('Access-Control-Expose-Headers', 'X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+            
+            // Add Streamable HTTP specific headers with guaranteed session ID
+            $response->header('X-MCP-Session-ID', $this->sessionId);
+            $response->header('X-MCP-Transport', 'streamable-http');
+            $response->header('X-MCP-Protocol-Version', '2024-11-05');
+            
+            // Add session tracking for MCP Inspector compatibility
+            $response->header('X-Session-Status', 'active');
+            $response->header('X-Server-Name', 'WordPress MCP Bridge v' . MCP_BRIDGE_VERSION);
+            
+            Logger::info('Response prepared with enhanced session tracking', [
+                'session_id' => $this->sessionId,
+                'method' => $method,
+                'response_size' => strlen(json_encode($result)),
+                'headers_added' => ['X-MCP-Session-ID', 'X-MCP-Transport', 'X-MCP-Protocol-Version', 'X-Session-Status']
+            ]);
+
+            return $response;
 
         } catch (\Exception $e) {
             Logger::error('RPC request failed', [
@@ -98,17 +166,32 @@ class WpMcp
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
-                'request_body' => $request->get_body()
+                'request_body' => $request->get_body(),
+                'session_id' => $this->sessionId
             ]);
 
-            return new \WP_REST_Response([
+            $response = new \WP_REST_Response([
                 'jsonrpc' => '2.0',
                 'error' => [
                     'code' => $e->getCode() ?: -1,
                     'message' => $e->getMessage()
                 ],
-                'id' => $json['id'] ?? null
+                'id' => isset($json) && isset($json['id']) ? $json['id'] : null
             ], 400);
+
+            // Add CORS headers even for errors
+            $response->header('Access-Control-Allow-Origin', '*');
+            $response->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+            $response->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+            $response->header('Access-Control-Expose-Headers', 'X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+            
+            // Add Streamable HTTP specific headers even for errors
+            $response->header('X-MCP-Session-ID', $this->sessionId);
+            $response->header('X-MCP-Transport', 'streamable-http');
+            $response->header('X-MCP-Protocol-Version', '2024-11-05');
+            $response->header('X-Session-Status', 'error');
+
+            return $response;
         }
     }
 
@@ -121,8 +204,29 @@ class WpMcp
      */
     private function processRpcMethod(string $method, array $params)
     {
+        Logger::info('Processing RPC method', [
+            'method' => $method,
+            'params_keys' => array_keys($params),
+            'session_id' => $this->sessionId
+        ]);
+
         // Handle MCP protocol methods
         switch ($method) {
+            // Core MCP protocol methods
+            case 'initialize':
+                return $this->initialize($params);
+            
+            case 'ping':
+                return $this->ping();
+            
+            case 'notifications/initialized':
+                return $this->notificationsInitialized();
+                
+            // Alternative notification format that some clients use
+            case 'initialized':
+                return $this->notificationsInitialized();
+            
+            // Tool-related methods
             case 'tools/list':
                 return $this->getToolsList();
             
@@ -131,6 +235,16 @@ class WpMcp
                     throw new \Exception('Tool name is required');
                 }
                 return $this->callTool($params['name'], $params['arguments'] ?? []);
+            
+            // Resource-related methods
+            case 'resources/list':
+                return $this->getResourcesList();
+            
+            case 'resources/read':
+                if (!isset($params['uri'])) {
+                    throw new \Exception('Resource URI is required');
+                }
+                return $this->readResource($params['uri']);
             
             // Legacy methods for backward compatibility
             case 'getPosts':
@@ -145,8 +259,113 @@ class WpMcp
                     return RegisterMcpTool::executeTool($method, $params);
                 }
                 
+                Logger::warning('Unknown method called', [
+                    'method' => $method,
+                    'available_methods' => [
+                        'initialize', 'ping', 'notifications/initialized', 'initialized',
+                        'tools/list', 'tools/call', 'resources/list', 'resources/read',
+                        'getPosts', 'createPost'
+                    ]
+                ]);
+                
                 throw new \Exception("Unknown method: {$method}");
         }
+    }
+
+    /**
+     * Handle MCP initialize method
+     *
+     * @param array $params
+     * @return array
+     */
+    private function initialize(array $params): array
+    {
+        Logger::info('MCP initialize called', [
+            'params' => $params,
+            'session_id' => $this->sessionId,
+            'client_info' => $params['clientInfo'] ?? 'unknown'
+        ]);
+        
+        // Validate protocol version
+        $clientProtocolVersion = $params['protocolVersion'] ?? null;
+        if ($clientProtocolVersion && $clientProtocolVersion !== '2024-11-05') {
+            Logger::warning('Protocol version mismatch', [
+                'client_version' => $clientProtocolVersion,
+                'server_version' => '2024-11-05'
+            ]);
+        }
+        
+        // Log client capabilities for debugging
+        if (isset($params['capabilities'])) {
+            Logger::info('Client capabilities received', [
+                'capabilities' => $params['capabilities']
+            ]);
+        }
+        
+        // Enhanced server capabilities for MCP Inspector compatibility
+        $response = [
+            'protocolVersion' => '2024-11-05',
+            'capabilities' => [
+                'tools' => [
+                    'listChanged' => false
+                ],
+                'resources' => [
+                    'subscribe' => false,
+                    'listChanged' => false
+                ],
+                'prompts' => [
+                    'listChanged' => false
+                ],
+                'logging' => (object)[]  // オブジェクトとして返す（MCP Inspector v0.14.0 Zod validation対応）
+            ],
+            'serverInfo' => [
+                'name' => 'WordPress MCP Bridge',
+                'version' => MCP_BRIDGE_VERSION
+            ]
+        ];
+        
+        Logger::info('MCP initialize response prepared', [
+            'response' => $response,
+            'session_id' => $this->sessionId,
+            'capabilities_count' => count($response['capabilities'])
+        ]);
+        
+        return $response;
+    }
+
+    /**
+     * Handle MCP ping method
+     *
+     * @return array
+     */
+    private function ping(): array
+    {
+        Logger::debug('MCP ping called');
+        return [];
+    }
+
+    /**
+     * Handle notifications/initialized method
+     *
+     * @return array
+     */
+    private function notificationsInitialized(): array
+    {
+        Logger::info('MCP notifications/initialized called - Handshake completing', [
+            'session_id' => $this->sessionId,
+            'authenticated_user' => $this->authenticatedUser ? $this->authenticatedUser->user_login : 'none',
+            'timestamp' => current_time('mysql')
+        ]);
+        
+        // Mark the MCP connection as fully initialized
+        // This is the final step in the MCP handshake process
+        Logger::info('MCP handshake completed successfully', [
+            'session_id' => $this->sessionId,
+            'connection_status' => 'fully_initialized'
+        ]);
+        
+        // Return empty object as per MCP specification for notifications
+        return [];
     }
 
     /**
@@ -187,6 +406,69 @@ class WpMcp
     private function callTool(string $name, array $arguments): mixed
     {
         return RegisterMcpTool::executeTool($name, $arguments);
+    }
+
+    /**
+     * Get list of available resources
+     *
+     * @return array
+     */
+    private function getResourcesList(): array
+    {
+        Logger::debug('Getting resources list');
+        
+        $resources = [];
+        
+        // Add WordPress post types as resources
+        $post_types = get_post_types(['public' => true], 'objects');
+        foreach ($post_types as $post_type) {
+            $resources[] = [
+                'uri' => "wordpress://posts/{$post_type->name}",
+                'name' => $post_type->labels->name,
+                'description' => $post_type->description ?: "WordPress {$post_type->labels->name}",
+                'mimeType' => 'application/json'
+            ];
+        }
+        
+        return ['resources' => $resources];
+    }
+
+    /**
+     * Read a specific resource
+     *
+     * @param string $uri
+     * @return array
+     */
+    private function readResource(string $uri): array
+    {
+        Logger::debug('Reading resource', ['uri' => $uri]);
+        
+        if (!preg_match('/^wordpress:\/\/posts\/(.+)$/', $uri, $matches)) {
+            throw new \Exception("Unsupported resource URI: {$uri}");
+        }
+        
+        $post_type = $matches[1];
+        
+        if (!post_type_exists($post_type)) {
+            throw new \Exception("Post type '{$post_type}' does not exist");
+        }
+        
+        $posts = get_posts([
+            'post_type' => $post_type,
+            'numberposts' => 10,
+            'post_status' => 'publish'
+        ]);
+        
+        $contents = [];
+        foreach ($posts as $post) {
+            $contents[] = [
+                'uri' => "wordpress://posts/{$post_type}/{$post->ID}",
+                'mimeType' => 'text/plain',
+                'text' => $post->post_content
+            ];
+        }
+        
+        return ['contents' => $contents];
     }
 
     /**
@@ -384,5 +666,28 @@ class WpMcp
         }
 
         return null;
+    }
+
+    /**
+     * Generate a new session ID
+     *
+     * @return string
+     */
+    private function generateSessionId(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    /**
+     * Get session ID for external access
+     *
+     * @return string
+     */
+    public function getSessionId(): string
+    {
+        if (!$this->sessionId) {
+            $this->sessionId = $this->generateSessionId();
+        }
+        return $this->sessionId;
     }
 }

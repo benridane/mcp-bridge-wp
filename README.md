@@ -1,6 +1,6 @@
 # MCP Bridge
 
-A WordPress plugin that bridges the WordPress REST API with the Model Context Protocol (MCP), enabling AI agents to interact with WordPress sites through a standardized interface.
+A WordPress plugin that provides MCP (Model Context Protocol) interface with Application Password authentication, enabling AI agents to interact with WordPress sites through a standardized interface.
 
 **Important**: This plugin **does not support streaming functionality**. It only supports simple request-response HTTP communication and intentionally excludes complex SSE (Server-Sent Events) or long-lived connections.
 
@@ -91,6 +91,50 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.1.5
+- **🔧 MCP Inspector v0.14.0 Zod Validation Fix**
+  - Fixed `capabilities.logging` field type compatibility with MCP Inspector v0.14.0
+  - Changed logging capabilities from array to object to meet Zod schema validation requirements
+  - Resolved "Expected object, received array" validation error in MCP Inspector
+  - Enhanced MCP protocol compliance for better client compatibility
+  - Improved initialization response format for modern MCP clients
+
+### 1.1.4
+- **🔧 MCP Inspector Compatibility Fixes**
+  - Fixed `sessionId undefined` error in MCP Inspector console output
+  - Enhanced session management to accept and use client-provided session IDs
+  - Improved Connection Error handling with better session tracking
+  - Added comprehensive CORS headers for MCP Inspector compatibility
+  - Enhanced debugging output with session status tracking
+  - Added X-Session-Status and X-Server-Name headers for better client identification
+  - Improved error responses with consistent session ID headers
+  - Enhanced logging for MCP Inspector specific debugging
+
+### 1.1.3
+- Enhanced MCP Inspector compatibility with improved CORS handling
+- Added comprehensive preflight OPTIONS request support
+- Enhanced session management with guaranteed session ID availability
+- Improved authentication flow for initialization methods
+- Added prompts capability to server capabilities
+- Enhanced logging for better connection debugging
+- Fixed connection errors in MCP Inspector UI
+
+### 1.1.2
+- Fixed MCP Inspector sessionId undefined issue
+- Enhanced session management with guaranteed session ID generation
+- Improved Streamable HTTP transport compatibility
+- Added X-MCP-Protocol-Version header for better client compatibility
+- Enhanced logging for session tracking and debugging
+
+### 1.1.1
+- Added complete MCP Inspector compatibility
+- Implemented `notifications/initialized` handshake support
+- Enhanced MCP protocol compliance with proper initialization sequence
+- Added detailed session tracking with X-MCP-Session-ID headers
+- Improved authentication method detection and error handling
+- Enhanced logging for better debugging and monitoring
+- Maintained backward compatibility with legacy endpoints
 
 ### 1.1.0
 - Added StreamableHTTP compliant `/mcp` endpoint
