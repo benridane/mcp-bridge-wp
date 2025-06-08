@@ -388,12 +388,30 @@ class WpMcp
                 'description' => $tool['description'],
                 'inputSchema' => [
                     'type' => 'object',
-                    'properties' => $tool['parameters'],
+                    'properties' => (object)$tool['parameters'], // Cast to object for MCP Inspector v0.14.0 Zod validation
+                    'required' => $this->getRequiredProperties($tool['parameters'])
                 ]
             ];
         }
 
         return ['tools' => $result];
+    }
+
+    /**
+     * Get required properties from tool parameters
+     *
+     * @param array $parameters
+     * @return array
+     */
+    private function getRequiredProperties(array $parameters): array
+    {
+        $required = [];
+        foreach ($parameters as $name => $schema) {
+            if (isset($schema['required']) && $schema['required']) {
+                $required[] = $name;
+            }
+        }
+        return $required;
     }
 
     /**
