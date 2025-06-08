@@ -1,0 +1,44 @@
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/backup-db/
+wp-content/advanced-cache.php
+wp-content/wp-cache-config.php
+
+# Plugin specific
+logs/*.log
+logs/.htaccess
+
+# Development files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build files
+*.zip
+build/
+dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+
+# Reference code (development only)
+reference-code/
+
+# Temporary files
+tmp/
+temp/
