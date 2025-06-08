@@ -76,14 +76,28 @@ class Plugin
         register_activation_hook(MCP_BRIDGE_PATH . 'mcp-bridge.php', [$this, 'activate']);
         register_deactivation_hook(MCP_BRIDGE_PATH . 'mcp-bridge.php', [$this, 'deactivate']);
 
-        // Initialize REST API
-        add_action('rest_api_init', [$this, 'initRestApi']);
+        // Load REST API configuration
+        $this->loadRestApi();
 
         // Admin initialization
         add_action('admin_init', [$this, 'initAdmin']);
 
         // Plugin loaded
         add_action('plugins_loaded', [$this, 'pluginsLoaded']);
+    }
+
+    /**
+     * Load REST API configuration
+     */
+    private function loadRestApi(): void
+    {
+        $restApiFile = MCP_BRIDGE_INCLUDES_PATH . 'rest-api.php';
+        if (file_exists($restApiFile)) {
+            require_once $restApiFile;
+            Logger::debug('rest-api.php ファイルが Plugin.php から読み込まれました');
+        } else {
+            Logger::error('rest-api.php ファイルが見つかりません: ' . $restApiFile);
+        }
     }
 
     /**
@@ -127,28 +141,6 @@ class Plugin
 
         // Flush rewrite rules
         flush_rewrite_rules();
-    }
-
-    /**
-     * Initialize REST API
-     */
-    public function initRestApi(): void
-    {
-        // Register main MCP RPC endpoint
-        register_rest_route(MCP_BRIDGE_REST_NAMESPACE, MCP_BRIDGE_REST_ROUTE_RPC, [
-            'methods' => 'POST',
-            'callback' => [WpMcp::getInstance(), 'handleRpcRequest'],
-            'permission_callback' => [WpMcp::getInstance(), 'checkPermissions'],
-        ]);
-
-        // Register tools manifest endpoint
-        register_rest_route(MCP_BRIDGE_REST_NAMESPACE, '/tools', [
-            'methods' => 'GET',
-            'callback' => [$this, 'getToolsManifest'],
-            'permission_callback' => '__return_true', // Public endpoint
-        ]);
-
-        Logger::debug('REST API endpoints registered');
     }
 
     /**

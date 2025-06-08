@@ -42,3 +42,12 @@ reference-code/
 # Temporary files
 tmp/
 temp/
+
+# Development and testing tools
+tools/test-mcp-bridge.sh
+tools/mcp-inspector-config.json
+
+# Any potential sensitive config files
+config/development.php
+config/local.php
+*.local.php

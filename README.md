@@ -1,6 +1,8 @@
 # MCP Bridge
 
-WordPress plugin that provides a Model Context Protocol (MCP) interface for seamless integration with AI tools and external applications.
+A WordPress plugin that bridges the WordPress REST API with the Model Context Protocol (MCP), enabling AI agents to interact with WordPress sites through a standardized interface.
+
+**Important**: This plugin **does not support streaming functionality**. It only supports simple request-response HTTP communication and intentionally excludes complex SSE (Server-Sent Events) or long-lived connections.
 
 ## Features
 
@@ -10,6 +12,23 @@ WordPress plugin that provides a Model Context Protocol (MCP) interface for seam
 - **Extensible Tool System**: Easy registration and management of MCP tools
 - **Comprehensive Logging**: Debug and audit logging with configurable levels
 - **PSR-4 Autoloading**: Modern PHP development standards
+- **StreamableHTTP Support**: MCP over HTTP compliant endpoints (without streaming)
+
+## Technical Specifications
+
+### ✅ Supported Features
+- **Streamable HTTP Transport**: Single endpoint (`/mcp`) communication
+- **JSON-RPC 2.0**: Standard request-response format
+- **WordPress REST API**: Existing API MCP tool integration
+- **Authentication**: Application Password, Bearer Token support
+- **Stateless Communication**: Simple HTTP request-response pattern
+
+### ❌ Intentionally Excluded Features
+- **Streaming Communication**: SSE, WebSocket, or long-lived connections
+- **Real-time Notifications**: Server-push communication
+- **Bidirectional Communication**: Client-to-server communication only
+- **Session Management**: Stateless communication only
+- **Complex Transport Protocols**: Simple HTTP only
 
 ## Available Tools
 
@@ -26,8 +45,9 @@ WordPress plugin that provides a Model Context Protocol (MCP) interface for seam
 
 ## API Endpoints
 
-- `GET /wp-json/mcp/v1/tools` - Get available tools manifest
-- `POST /wp-json/mcp/v1/rpc` - Execute MCP JSON-RPC requests
+- **Primary MCP Endpoint (StreamableHTTP compliant)**: `POST /mcp`
+- **Legacy Endpoint**: `POST /wp-json/mcp/v1/rpc` (maintained for backward compatibility)
+- **Tools Manifest**: `GET /wp-json/mcp/v1/tools`
 
 ## Authentication
 
@@ -40,14 +60,20 @@ The plugin supports multiple authentication methods:
 ## Usage Example
 
 ```bash
-# Get available tools
-curl -X GET https://your-site.com/wp-json/mcp/v1/tools
+# Using the StreamableHTTP compliant endpoint
+curl -X POST https://your-site.com/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: base64(username:app_password)" \
+  -d '{"method": "getPosts", "params": {"limit": 5}}'
 
-# Get site information
+# Legacy endpoint (still supported)
 curl -X POST https://your-site.com/wp-json/mcp/v1/rpc \
   -H "Content-Type: application/json" \
   -H "X-API-Key: base64(username:app_password)" \
-  -d '{"method": "wp_get_site_info", "id": 1}'
+  -d '{"method": "getPosts", "params": {"limit": 5}}'
+
+# Get available tools
+curl -X GET https://your-site.com/wp-json/mcp/v1/tools
 ```
 
 ## Requirements
@@ -65,6 +91,11 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.1.0
+- Added StreamableHTTP compliant `/mcp` endpoint
+- Maintained backward compatibility with legacy endpoints
+- Enhanced MCP over HTTP support
 
 ### 1.0.0
 - Initial release
