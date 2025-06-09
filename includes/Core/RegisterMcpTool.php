@@ -175,9 +175,9 @@ class RegisterMcpTool
      *
      * @param array $tool Tool configuration
      * @param array $params Parameters
-     * @return mixed
+     * @return array MCP-compliant response format
      */
-    private static function executeRestAlias(array $tool, array $params)
+    private static function executeRestAlias(array $tool, array $params): array
     {
         $restAlias = $tool['rest_alias'];
         $route = $restAlias['route'];
@@ -191,9 +191,30 @@ class RegisterMcpTool
 
         // Replace route parameters
         $processedRoute = self::processRouteParameters($route, $params);
+        
+        // Normalize route - ensure it starts with /wp/v2 if not present
+        if (!str_starts_with($processedRoute, '/wp/v2')) {
+            if (str_starts_with($processedRoute, '/')) {
+                $processedRoute = '/wp/v2' . $processedRoute;
+            } else {
+                $processedRoute = '/wp/v2/' . $processedRoute;
+            }
+        }
+
+        Logger::debug("Processed route", [
+            'original_route' => $route,
+            'processed_route' => $processedRoute,
+            'method' => $method
+        ]);
 
         // Create internal REST request
-        $request = new \WP_REST_Request($method, '/wp/v2' . $processedRoute);
+        $request = new \WP_REST_Request($method, $processedRoute);
+        
+        // Set the current user context for authentication
+        $currentUser = wp_get_current_user();
+        if ($currentUser && $currentUser->exists()) {
+            wp_set_current_user($currentUser->ID);
+        }
         
         // Set parameters based on method
         if ($method === 'GET') {
@@ -203,18 +224,73 @@ class RegisterMcpTool
                 }
             }
         } else {
+            // For POST/PUT/PATCH, set body parameters and also set JSON body
             $request->set_body_params($params);
+            $request->set_header('Content-Type', 'application/json');
+            
+            // Also set as JSON body for proper REST API processing
+            $jsonBody = json_encode($params);
+            $request->set_body($jsonBody);
+            
+            Logger::debug("Request body set", [
+                'params' => $params,
+                'json_body' => $jsonBody
+            ]);
         }
 
         // Execute the request
         $server = rest_get_server();
-        $response = $server->dispatch($request);
+        
+        try {
+            $response = $server->dispatch($request);
+            
+            Logger::debug("REST response received", [
+                'status' => $response->get_status(),
+                'is_error' => $response->is_error()
+            ]);
+            
+            if ($response->is_error()) {
+                $errorData = $response->get_error_data();
+                $errorMessage = $response->get_error_message();
+                
+                Logger::error("REST API error details", [
+                    'message' => $errorMessage,
+                    'data' => $errorData,
+                    'route' => $processedRoute,
+                    'method' => $method,
+                    'params' => $params
+                ]);
+                
+                throw new \Exception("REST API error: " . $errorMessage);
+            }
 
-        if ($response->is_error()) {
-            throw new \Exception("REST API error: " . $response->get_error_message());
+            $data = $response->get_data();
+            
+            Logger::info("REST API success", [
+                'route' => $processedRoute,
+                'method' => $method,
+                'response_status' => $response->get_status()
+            ]);
+            
+            // Return MCP-compliant format
+            return [
+                'content' => [
+                    [
+                        'type' => 'text',
+                        'text' => json_encode($data, JSON_PRETTY_PRINT)
+                    ]
+                ]
+            ];
+            
+        } catch (\Exception $e) {
+            Logger::error("Exception during REST API execution", [
+                'exception' => $e->getMessage(),
+                'route' => $processedRoute,
+                'method' => $method,
+                'params' => $params
+            ]);
+            throw $e;
         }
-
-        return $response->get_data();
     }
 
     /**
@@ -277,13 +353,63 @@ class RegisterMcpTool
                 continue;
             }
 
+            // Ensure properties is always an object (not array) for Zod validation
+            $properties = [];
+            $required = [];
+            
+            if (isset($tool['parameters']) && is_array($tool['parameters'])) {
+                foreach ($tool['parameters'] as $paramName => $paramSchema) {
+                    // Validate parameter schema structure
+                    if (!isset($paramSchema['type'])) {
+                        Logger::warning('Tool parameter missing type in manifest', [
+                            'tool' => $name,
+                            'parameter' => $paramName
+                        ]);
+                        continue;
+                    }
+                    
+                    $properties[$paramName] = [
+                        'type' => $paramSchema['type'],
+                        'description' => $paramSchema['description'] ?? ''
+                    ];
+                    
+                    // Add additional schema properties if present
+                    if (isset($paramSchema['enum'])) {
+                        $properties[$paramName]['enum'] = $paramSchema['enum'];
+                    }
+                    if (isset($paramSchema['default'])) {
+                        $properties[$paramName]['default'] = $paramSchema['default'];
+                    }
+                    if (isset($paramSchema['minimum'])) {
+                        $properties[$paramName]['minimum'] = $paramSchema['minimum'];
+                    }
+                    if (isset($paramSchema['maximum'])) {
+                        $properties[$paramName]['maximum'] = $paramSchema['maximum'];
+                    }
+                    
+                    // Collect required parameters
+                    if (isset($paramSchema['required']) && $paramSchema['required'] === true) {
+                        $required[] = $paramName;
+                    }
+                }
+            }
+
+            $inputSchema = [
+                'type' => 'object',
+                'properties' => (object)$properties, // Explicitly cast to object for Zod validation
+                'additionalProperties' => true, // Allow additional properties for better MCP client compatibility
+                '$schema' => 'http://json-schema.org/draft-07/schema#' // Add JSON Schema metadata
+            ];
+            
+            // Only add required array if there are required fields
+            if (!empty($required)) {
+                $inputSchema['required'] = $required;
+            }
+
             $manifest['tools'][] = [
                 'name' => $name,
                 'description' => $tool['description'],
-                'inputSchema' => [
-                    'type' => 'object',
-                    'properties' => $tool['parameters'],
-                ]
+                'inputSchema' => $inputSchema
             ];
         }
 

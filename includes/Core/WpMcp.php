@@ -65,12 +65,17 @@ class WpMcp
 
         // Check for existing session ID in headers (for MCP Inspector compatibility)
         $clientSessionId = $request->get_header('X-MCP-Session-ID');
-        if ($clientSessionId && !empty($clientSessionId)) {
-            Logger::info('Using client-provided session ID', [
+        if ($clientSessionId && !empty($clientSessionId) && $this->isValidSessionId($clientSessionId)) {
+            Logger::info('Using validated client-provided session ID', [
                 'client_session_id' => $clientSessionId,
                 'server_session_id' => $this->sessionId
             ]);
             $this->sessionId = $clientSessionId;
+        } elseif ($clientSessionId && !$this->isValidSessionId($clientSessionId)) {
+            Logger::warning('Invalid client session ID format, using server-generated ID', [
+                'invalid_session_id' => $clientSessionId,
+                'server_session_id' => $this->sessionId
+            ]);
         }
 
         Logger::info('Received MCP RPC request', [
@@ -170,14 +175,20 @@ class WpMcp
                 'session_id' => $this->sessionId
             ]);
 
+            // Use HTTP 200 for JSON-RPC errors as per MCP specification
             $response = new \WP_REST_Response([
                 'jsonrpc' => '2.0',
                 'error' => [
-                    'code' => $e->getCode() ?: -1,
-                    'message' => $e->getMessage()
+                    'code' => $this->getStandardErrorCode($e->getCode()),
+                    'message' => $e->getMessage(),
+                    'data' => [
+                        'type' => get_class($e),
+                        'file' => basename($e->getFile()),
+                        'line' => $e->getLine()
+                    ]
                 ],
                 'id' => isset($json) && isset($json['id']) ? $json['id'] : null
-            ], 400);
+            ], 200); // Changed from 400 to 200 for MCP compliance
 
             // Add CORS headers even for errors
             $response->header('Access-Control-Allow-Origin', '*');
@@ -383,14 +394,65 @@ class WpMcp
                 continue;
             }
 
+            // Ensure properties is always an object (not array) for Zod validation
+            $properties = [];
+            $required = [];
+            
+            if (isset($tool['parameters']) && is_array($tool['parameters'])) {
+                foreach ($tool['parameters'] as $paramName => $paramSchema) {
+                    // Validate parameter schema structure
+                    if (!isset($paramSchema['type'])) {
+                        Logger::warning('Tool parameter missing type', [
+                            'tool' => $name,
+                            'parameter' => $paramName
+                        ]);
+                        continue;
+                    }
+                    
+                    $properties[$paramName] = [
+                        'type' => $paramSchema['type'],
+                        'description' => $paramSchema['description'] ?? ''
+                    ];
+                    
+                    // Add additional schema properties if present
+                    if (isset($paramSchema['enum'])) {
+                        $properties[$paramName]['enum'] = $paramSchema['enum'];
+                    }
+                    if (isset($paramSchema['default'])) {
+                        $properties[$paramName]['default'] = $paramSchema['default'];
+                    }
+                    if (isset($paramSchema['minimum'])) {
+                        $properties[$paramName]['minimum'] = $paramSchema['minimum'];
+                    }
+                    if (isset($paramSchema['maximum'])) {
+                        $properties[$paramName]['maximum'] = $paramSchema['maximum'];
+                    }
+                    
+                    // Collect required parameters
+                    if (isset($paramSchema['required']) && $paramSchema['required'] === true) {
+                        $required[] = $paramName;
+                    }
+                }
+            }
+
+            $inputSchema = [
+                'type' => 'object',
+                'properties' => (object)$properties, // Explicitly cast to object for Zod validation
+                'additionalProperties' => true // Allow additional properties for better MCP client compatibility
+            ];
+            
+            // Only add required array if there are required fields
+            if (!empty($required)) {
+                $inputSchema['required'] = $required;
+            }
+
+            // Add JSON Schema metadata for better validation
+            $inputSchema['$schema'] = 'http://json-schema.org/draft-07/schema#';
+            
             $result[] = [
                 'name' => $name,
                 'description' => $tool['description'],
-                'inputSchema' => [
-                    'type' => 'object',
-                    'properties' => (object)$tool['parameters'], // Cast to object for MCP Inspector v0.14.0 Zod validation
-                    'required' => $this->getRequiredProperties($tool['parameters'])
-                ]
+                'inputSchema' => $inputSchema
             ];
         }
 
@@ -419,11 +481,26 @@ class WpMcp
      *
      * @param string $name
      * @param array $arguments
-     * @return mixed
+     * @return array MCP-compliant response format
      */
-    private function callTool(string $name, array $arguments): mixed
+    private function callTool(string $name, array $arguments): array
     {
-        return RegisterMcpTool::executeTool($name, $arguments);
+        $result = RegisterMcpTool::executeTool($name, $arguments);
+        
+        // If the result is already in MCP format (has 'content' key), return as-is
+        if (is_array($result) && isset($result['content'])) {
+            return $result;
+        }
+        
+        // Otherwise, wrap the result in MCP-compliant format
+        return [
+            'content' => [
+                [
+                    'type' => 'text',
+                    'text' => json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+                ]
+            ]
+        ];
     }
 
     /**
@@ -486,7 +563,8 @@ class WpMcp
             ];
         }
         
-        return ['contents' => $contents];
+        // MCP specification uses 'content' (singular) for resource read responses
+        return ['content' => $contents];
     }
 
     /**
@@ -693,7 +771,29 @@ class WpMcp
      */
     private function generateSessionId(): string
     {
-        return bin2hex(random_bytes(16));
+        // Use cryptographically secure random bytes with higher entropy
+        return 'mcp-session-' . bin2hex(random_bytes(24)) . '-' . time();
+    }
+
+    /**
+     * Validate client-provided session ID
+     *
+     * @param string $sessionId
+     * @return bool
+     */
+    private function isValidSessionId(string $sessionId): bool
+    {
+        // Basic validation for session ID format and length
+        if (empty($sessionId) || strlen($sessionId) < 16) {
+            return false;
+        }
+        
+        // Check for basic alphanumeric and hyphen characters
+        if (!preg_match('/^[a-zA-Z0-9\-_]+$/', $sessionId)) {
+            return false;
+        }
+        
+        return true;
     }
 
     /**
@@ -707,5 +807,32 @@ class WpMcp
             $this->sessionId = $this->generateSessionId();
         }
         return $this->sessionId;
+    }
+
+    /**
+     * Get standard JSON-RPC error code
+     *
+     * @param int $errorCode
+     * @return int
+     */
+    private function getStandardErrorCode(int $errorCode): int
+    {
+        // Map common error codes to JSON-RPC 2.0 standard error codes
+        switch ($errorCode) {
+            case 0:
+                return -32603; // Internal error
+            case 400:
+                return -32602; // Invalid params
+            case 401:
+                return -32600; // Invalid request
+            case 403:
+                return -32601; // Method not found
+            case 404:
+                return -32601; // Method not found
+            case 500:
+                return -32603; // Internal error
+            default:
+                return $errorCode ?: -32603; // Default to internal error
+        }
     }
 }

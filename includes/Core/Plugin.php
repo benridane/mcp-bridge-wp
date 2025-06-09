@@ -195,27 +195,59 @@ class Plugin
                 'method' => 'GET'
             ],
             'parameters' => [
-                'per_page' => ['type' => 'integer', 'description' => 'Number of posts to retrieve'],
-                'page' => ['type' => 'integer', 'description' => 'Page number'],
-                'search' => ['type' => 'string', 'description' => 'Search term'],
-                'status' => ['type' => 'string', 'description' => 'Post status']
+                'per_page' => [
+                    'type' => 'integer', 
+                    'description' => 'Number of posts to retrieve',
+                    'minimum' => 1,
+                    'maximum' => 100,
+                    'default' => 10
+                ],
+                'page' => [
+                    'type' => 'integer', 
+                    'description' => 'Page number',
+                    'minimum' => 1,
+                    'default' => 1
+                ],
+                'search' => [
+                    'type' => 'string', 
+                    'description' => 'Search term'
+                ],
+                'status' => [
+                    'type' => 'string', 
+                    'description' => 'Post status',
+                    'enum' => ['publish', 'draft', 'private', 'pending', 'future'],
+                    'default' => 'publish'
+                ]
             ]
         ]);
 
-        // Create post tool (migrated from existing code)
+        // Create post tool with direct callback for better error handling
         new RegisterMcpTool([
             'name' => 'wp_create_post',
             'description' => 'Create a new WordPress post',
             'type' => 'create',
-            'rest_alias' => [
-                'route' => '/posts',
-                'method' => 'POST'
-            ],
+            'callback' => [$this, 'createPost'],
             'parameters' => [
-                'title' => ['type' => 'string', 'description' => 'Post title'],
-                'content' => ['type' => 'string', 'description' => 'Post content'],
-                'status' => ['type' => 'string', 'description' => 'Post status'],
-                'excerpt' => ['type' => 'string', 'description' => 'Post excerpt']
+                'title' => [
+                    'type' => 'string', 
+                    'description' => 'Post title',
+                    'required' => true
+                ],
+                'content' => [
+                    'type' => 'string', 
+                    'description' => 'Post content',
+                    'required' => true
+                ],
+                'status' => [
+                    'type' => 'string', 
+                    'description' => 'Post status',
+                    'enum' => ['publish', 'draft', 'private', 'pending'],
+                    'default' => 'draft'
+                ],
+                'excerpt' => [
+                    'type' => 'string', 
+                    'description' => 'Post excerpt'
+                ]
             ]
         ]);
 
@@ -226,11 +258,11 @@ class Plugin
      * Get site information
      *
      * @param array $params
-     * @return array
+     * @return array MCP-compliant response format
      */
     public function getSiteInfo(array $params = []): array
     {
-        return [
+        $siteData = [
             'name' => get_bloginfo('name'),
             'description' => get_bloginfo('description'),
             'url' => get_bloginfo('url'),
@@ -243,6 +275,16 @@ class Plugin
             'start_of_week' => get_option('start_of_week'),
             'plugin_version' => MCP_BRIDGE_VERSION,
         ];
+
+        // Return MCP-compliant format
+        return [
+            'content' => [
+                [
+                    'type' => 'text',
+                    'text' => json_encode($siteData, JSON_PRETTY_PRINT)
+                ]
+            ]
+        ];
     }
 
     /**
@@ -254,6 +296,111 @@ class Plugin
     {
         $manifest = RegisterMcpTool::getManifest();
         return new \WP_REST_Response($manifest, 200);
+    }
+
+    /**
+     * Create a new WordPress post
+     *
+     * @param array $params
+     * @return array MCP-compliant response format
+     */
+    public function createPost(array $params = []): array
+    {
+        try {
+            Logger::info('Creating new post via MCP', [
+                'params' => $params,
+                'user' => wp_get_current_user()->user_login ?? 'unknown'
+            ]);
+
+            // Validate required parameters
+            if (empty($params['title'])) {
+                throw new \Exception('Post title is required');
+            }
+
+            if (empty($params['content'])) {
+                throw new \Exception('Post content is required');
+            }
+
+            // Prepare post data
+            $postData = [
+                'post_title' => sanitize_text_field($params['title']),
+                'post_content' => wp_kses_post($params['content']),
+                'post_status' => $params['status'] ?? 'draft',
+                'post_type' => 'post',
+                'post_author' => get_current_user_id()
+            ];
+
+            // Add excerpt if provided
+            if (!empty($params['excerpt'])) {
+                $postData['post_excerpt'] = sanitize_textarea_field($params['excerpt']);
+            }
+
+            // Validate post status
+            $validStatuses = ['publish', 'draft', 'private', 'pending'];
+            if (!in_array($postData['post_status'], $validStatuses)) {
+                $postData['post_status'] = 'draft';
+            }
+
+            Logger::debug('Post data prepared', ['post_data' => $postData]);
+
+            // Create the post
+            $postId = wp_insert_post($postData, true);
+
+            if (is_wp_error($postId)) {
+                $errorMessage = $postId->get_error_message();
+                Logger::error('Failed to create post', [
+                    'error' => $errorMessage,
+                    'post_data' => $postData
+                ]);
+                throw new \Exception('Failed to create post: ' . $errorMessage);
+            }
+
+            // Get the created post
+            $createdPost = get_post($postId);
+            if (!$createdPost) {
+                throw new \Exception('Post created but could not retrieve post data');
+            }
+
+            Logger::info('Post created successfully', [
+                'post_id' => $postId,
+                'post_title' => $createdPost->post_title,
+                'post_status' => $createdPost->post_status
+            ]);
+
+            // Prepare response data
+            $responseData = [
+                'id' => $postId,
+                'title' => $createdPost->post_title,
+                'content' => $createdPost->post_content,
+                'excerpt' => $createdPost->post_excerpt,
+                'status' => $createdPost->post_status,
+                'date' => $createdPost->post_date,
+                'modified' => $createdPost->post_modified,
+                'author' => $createdPost->post_author,
+                'slug' => $createdPost->post_name,
+                'permalink' => get_permalink($postId),
+                'edit_link' => get_edit_post_link($postId, 'raw')
+            ];
+
+            // Return MCP-compliant format
+            return [
+                'content' => [
+                    [
+                        'type' => 'text',
+                        'text' => json_encode($responseData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+                    ]
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Logger::error('Exception in createPost', [
+                'exception' => $e->getMessage(),
+                'params' => $params,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            throw $e;
+        }
     }
 
     /**

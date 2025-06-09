@@ -61,7 +61,7 @@ The plugin supports multiple authentication methods:
 
 ```bash
 # Using the StreamableHTTP compliant endpoint
-curl -X POST https://your-site.com/mcp \
+curl -X POST https://your-site.com/wp-json/mcp/v1/mcp \
   -H "Content-Type: application/json" \
   -H "X-API-Key: base64(username:app_password)" \
   -d '{"method": "getPosts", "params": {"limit": 5}}'
@@ -72,8 +72,6 @@ curl -X POST https://your-site.com/wp-json/mcp/v1/rpc \
   -H "X-API-Key: base64(username:app_password)" \
   -d '{"method": "getPosts", "params": {"limit": 5}}'
 
-# Get available tools
-curl -X GET https://your-site.com/wp-json/mcp/v1/tools
 ```
 
 ## Requirements
@@ -91,6 +89,20 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.1.7
+- **🚀 Post Creation Bug Fixes**
+  - Fixed HTTP 500 error when creating posts via MCP
+  - Improved REST API route handling and request processing
+  - Enhanced error handling with detailed logging for post creation
+  - Added direct callback implementation for `wp_create_post` tool
+  - Better parameter validation and sanitization
+  - Improved MCP-compliant response formatting for created posts
+
+### 1.1.6
+- Fixed logging configuration and enhanced debugging capabilities
+- Improved tool registration system with better error handling
+- Enhanced MCP protocol compliance
 
 ### 1.1.5
 - **🔧 MCP Inspector v0.14.0 Zod Validation Fix**
