@@ -1,0 +1,197 @@
+# Quality Assurance Workflow
+# Runs tests and code quality checks on pull requests and pushes
+name: Quality Assurance
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  php-lint:
+    name: PHP Lint & Code Style
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: |
+          if [ -f "composer.json" ]; then
+            composer install --prefer-dist --no-progress --no-interaction
+          fi
+
+      - name: PHP Syntax Check
+        run: find . -name "*.php" -not -path "./vendor/*" -not -path "./reference-code/*" -exec php -l {} \;
+
+      - name: Check for WordPress coding standards (if available)
+        run: |
+          if [ -f "phpcs.xml" ] || [ -f ".phpcs.xml" ]; then
+            if command -v phpcs &> /dev/null; then
+              phpcs
+            else
+              echo "PHPCS not available, skipping code style check"
+            fi
+          else
+            echo "No PHPCS configuration found, skipping code style check"
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  plugin-validation:
+    name: Plugin Structure Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate plugin structure
+        run: |
+          echo "🔍 Validating WordPress plugin structure..."
+          
+          # Check required files
+          required_files=("mcp-bridge.php" "README.md" "includes/")
+          for file in "${required_files[@]}"; do
+            if [ ! -e "$file" ]; then
+              echo "❌ Missing required file/directory: $file"
+              exit 1
+            fi
+            echo "✅ Found: $file"
+          done
+          
+          # Check plugin header in main file
+          if ! grep -q "Plugin Name:" mcp-bridge.php; then
+            echo "❌ Plugin header missing in mcp-bridge.php"
+            exit 1
+          fi
+          echo "✅ Plugin header found"
+          
+          # Check version consistency
+          if ! grep -q "Version:" mcp-bridge.php; then
+            echo "❌ Version header missing in mcp-bridge.php"
+            exit 1
+          fi
+          
+          if ! grep -q "MCP_BRIDGE_VERSION" mcp-bridge.php; then
+            echo "❌ Version constant missing in mcp-bridge.php"
+            exit 1
+          fi
+          echo "✅ Version information found"
+          
+          echo "🎉 Plugin structure validation passed!"
+
+  compatibility-check:
+    name: WordPress Compatibility Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['7.4', '8.0', '8.1', '8.2']
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP ${{ matrix.php-version }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+
+      - name: PHP Syntax Check
+        run: |
+          echo "🔍 Testing PHP ${{ matrix.php-version }} compatibility..."
+          find . -name "*.php" -not -path "./vendor/*" -not -path "./reference-code/*" -exec php -l {} \;
+          echo "✅ PHP ${{ matrix.php-version }} syntax check passed!"
+
+  build-test:
+    name: Build Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+
+      - name: Test build process
+        run: |
+          echo "🔨 Testing build process..."
+          
+          BUILD_DIR="/tmp/mcp-bridge-test-build"
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+          
+          # Copy files
+          cp -r . "$BUILD_DIR/mcp-bridge/"
+          cd "$BUILD_DIR/mcp-bridge"
+          
+          # Clean development files (same as release workflow)
+          rm -rf reference-code/
+          rm -rf logs/
+          rm -rf .git/
+          rm -rf .gitignore
+          rm -rf .github/
+          rm -rf .DS_Store
+          rm -rf tools/test-mcp-bridge.sh
+          rm -rf tools/create-release.sh
+          rm -rf composer.json
+          rm -rf composer.lock
+          rm -rf package.json
+          rm -rf node_modules/
+          rm -rf phpunit.xml*
+          rm -rf tests/
+          rm -rf .phpcs.xml
+          rm -rf .editorconfig
+          
+          # Verify essential files remain
+          if [ ! -f "mcp-bridge.php" ]; then
+            echo "❌ Main plugin file missing after cleanup"
+            exit 1
+          fi
+          
+          if [ ! -d "includes/" ]; then
+            echo "❌ Includes directory missing after cleanup"
+            exit 1
+          fi
+          
+          echo "✅ Build test passed!"
+          
+          # Create test ZIP
+          cd "$BUILD_DIR"
+          zip -r "mcp-bridge-test.zip" mcp-bridge/
+          
+          # Verify ZIP contents
+          unzip -t "mcp-bridge-test.zip"
+          echo "✅ ZIP file creation and validation passed!"

@@ -1,0 +1,106 @@
+# Manual Release Creation Workflow
+# Allows creating releases from the Actions tab
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.2.3)'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format. Please use semantic versioning (e.g., 1.2.3)"
+            exit 1
+          fi
+          echo "✅ Version format is valid: $VERSION"
+
+      - name: Check if tag exists
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "❌ Tag v$VERSION already exists"
+            exit 1
+          fi
+          echo "✅ Tag v$VERSION is available"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          # Get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -n "$LATEST_TAG" ]; then
+            echo "## Changes since $LATEST_TAG" > changelog.md
+            echo "" >> changelog.md
+            
+            # Get commits since last tag
+            git log --pretty=format:"- %s (%h)" "$LATEST_TAG"..HEAD >> changelog.md
+          else
+            echo "## Initial Release" > changelog.md
+            echo "" >> changelog.md
+            echo "This is the first release of MCP Bridge plugin." >> changelog.md
+          fi
+          
+          echo "" >> changelog.md
+          echo "## Installation" >> changelog.md
+          echo "1. Download the \`mcp-bridge-v$VERSION.zip\` file" >> changelog.md
+          echo "2. Upload it to your WordPress site via Plugins > Add New > Upload Plugin" >> changelog.md
+          echo "3. Activate the plugin" >> changelog.md
+          
+          # Set output for use in release creation
+          {
+            echo 'changelog<<EOF'
+            cat changelog.md
+            echo EOF
+          } >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          release_name: MCP Bridge v${{ github.event.inputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+
+      - name: Summary
+        run: |
+          echo "🎉 Release created successfully!"
+          echo "📋 Version: ${{ github.event.inputs.version }}"
+          echo "🏷️  Tag: v${{ github.event.inputs.version }}"
+          echo "📝 Draft: ${{ github.event.inputs.draft }}"
+          echo "🧪 Pre-release: ${{ github.event.inputs.prerelease }}"
+          echo ""
+          echo "The release workflow will now automatically build and upload the plugin ZIP file."

@@ -1,0 +1,172 @@
+# MCP Bridge Release Workflow
+# Triggers when a release is published in the GitHub UI
+name: Build and Release WordPress Plugin
+
+on:
+  release:
+    types: [published] # Trigger when a release is published
+
+jobs:
+  build-and-upload:
+    name: Build and Upload Plugin ZIP
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Checkout the specific tag associated with the release
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: composer:v2
+
+      - name: Extract version from tag
+        id: extract_version
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          # Remove 'v' prefix if present (e.g., v1.2.3 -> 1.2.3)
+          VERSION=${VERSION#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Plugin version: $VERSION"
+
+      - name: Update version in plugin file
+        run: |
+          VERSION=${{ steps.extract_version.outputs.version }}
+          # Update version in main plugin file
+          sed -i "s/Version: .*/Version: $VERSION/" mcp-bridge.php
+          sed -i "s/define('MCP_BRIDGE_VERSION', '[^']*');/define('MCP_BRIDGE_VERSION', '$VERSION');/" mcp-bridge.php
+          echo "Updated plugin version to: $VERSION"
+
+      - name: Install Composer dependencies (production only)
+        run: |
+          if [ -f "composer.json" ]; then
+            composer install --no-dev --optimize-autoloader --no-interaction
+          else
+            echo "No composer.json found, skipping composer install"
+          fi
+
+      - name: Create build directory
+        run: |
+          BUILD_DIR="/tmp/mcp-bridge-build"
+          OUTPUT_DIR="./dist"
+          
+          # Clean up previous builds
+          rm -rf "$BUILD_DIR"
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$BUILD_DIR"
+          mkdir -p "$OUTPUT_DIR"
+          
+          echo "BUILD_DIR=$BUILD_DIR" >> $GITHUB_ENV
+          echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
+
+      - name: Copy plugin files to build directory
+        run: |
+          echo "Copying plugin files..."
+          cp -r . "$BUILD_DIR/mcp-bridge/"
+          cd "$BUILD_DIR/mcp-bridge"
+          
+          # Remove development files and directories
+          echo "Cleaning up development files..."
+          rm -rf reference-code/
+          rm -rf logs/
+          rm -rf .git/
+          rm -rf .gitignore
+          rm -rf .github/
+          rm -rf .DS_Store
+          rm -rf tools/test-mcp-bridge.sh
+          rm -rf tools/create-release.sh
+          rm -rf tools/mcp-inspector-config.json
+          rm -rf composer.json
+          rm -rf composer.lock
+          rm -rf package.json
+          rm -rf node_modules/
+          rm -rf .env
+          rm -rf .env.local
+          rm -rf phpunit.xml
+          rm -rf phpunit.xml.dist
+          rm -rf tests/
+          rm -rf .phpcs.xml
+          rm -rf .editorconfig
+          rm -rf dist/
+          
+          # Keep only essential files for production
+          echo "Plugin files prepared for release"
+
+      - name: Create plugin ZIP
+        run: |
+          cd "$BUILD_DIR"
+          VERSION=${{ steps.extract_version.outputs.version }}
+          ZIP_NAME="mcp-bridge-v${VERSION}.zip"
+          
+          echo "Creating ZIP file: $ZIP_NAME"
+          zip -r "$GITHUB_WORKSPACE/$OUTPUT_DIR/$ZIP_NAME" mcp-bridge/ -x "*.DS_Store" "*/.git/*" "*/node_modules/*"
+          
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: Create version info file
+        run: |
+          VERSION=${{ steps.extract_version.outputs.version }}
+          cat > "$OUTPUT_DIR/version-info.txt" << EOF
+          MCP Bridge v$VERSION
+          Release Date: $(date '+%Y-%m-%d %H:%M:%S')
+          Git Commit: $(git rev-parse --short HEAD)
+          Git Tag: ${{ github.event.release.tag_name }}
+          WordPress Compatibility: 5.0+
+          PHP Compatibility: 7.4+
+          EOF
+
+      - name: Create file info
+        run: |
+          cd "$OUTPUT_DIR"
+          echo "Release Package Contents:" > file-info.txt
+          echo "========================" >> file-info.txt
+          ls -la >> file-info.txt
+          echo "" >> file-info.txt
+          echo "ZIP File Contents:" >> file-info.txt
+          echo "==================" >> file-info.txt
+          unzip -l "$ZIP_NAME" >> file-info.txt
+
+      - name: Upload Plugin ZIP as Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.OUTPUT_DIR }}/${{ env.ZIP_NAME }}
+          asset_name: ${{ env.ZIP_NAME }}
+          asset_content_type: application/zip
+
+      - name: Upload Version Info as Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.OUTPUT_DIR }}/version-info.txt
+          asset_name: version-info.txt
+          asset_content_type: text/plain
+
+      - name: Upload File Info as Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.OUTPUT_DIR }}/file-info.txt
+          asset_name: file-info.txt
+          asset_content_type: text/plain
+
+      - name: Summary
+        run: |
+          echo "✅ Release created successfully!"
+          echo "📁 Plugin: MCP Bridge"
+          echo "🏷️  Version: ${{ steps.extract_version.outputs.version }}"
+          echo "📦 ZIP File: ${{ env.ZIP_NAME }}"
+          echo "🔗 Release URL: ${{ github.event.release.html_url }}"
