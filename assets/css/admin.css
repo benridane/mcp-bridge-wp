@@ -1,0 +1,113 @@
+/* MCP Bridge Admin Styles */
+.mcp-bridge-info {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 20px 0;
+}
+
+.mcp-bridge-info h2 {
+    margin-top: 0;
+    color: #495057;
+}
+
+.mcp-bridge-info code {
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.tools-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    padding: 10px;
+    background: #fff;
+}
+
+.tool-item {
+    display: block;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+}
+
+.tool-item:last-child {
+    border-bottom: none;
+}
+
+.tool-item:hover {
+    background-color: #f8f9fa;
+}
+
+.tool-name {
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.tool-type {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    margin-right: 10px;
+}
+
+.tool-type-read {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.tool-type-create {
+    background-color: #cce5ff;
+    color: #004085;
+}
+
+.tool-type-update {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.tool-type-delete {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.tool-description {
+    color: #6c757d;
+    font-style: italic;
+    margin-right: 10px;
+}
+
+.tool-note {
+    color: #868e96;
+}
+
+.mcp-bridge-logs {
+    margin-top: 30px;
+}
+
+.log-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    background: #f8f9fa;
+}
+
+.log-content {
+    margin: 0;
+    padding: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+#refresh-logs, #clear-logs {
+    margin-right: 10px;
+}

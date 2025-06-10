@@ -152,8 +152,10 @@ class Plugin
             return;
         }
 
-        // Initialize admin components will be implemented in next phase
-        Logger::debug('Admin interface initialized');
+        // Initialize admin settings page
+        \McpBridge\Admin\Settings::getInstance();
+        
+        Logger::debug('Admin interface initialized with settings page');
     }
 
     /**
