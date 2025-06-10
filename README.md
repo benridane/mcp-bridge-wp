@@ -90,6 +90,28 @@ Contributions are welcome! Please read the contributing guidelines before submit
 
 ## Changelog
 
+### 1.3.0
+- **🛡️ Enhanced Security Features**
+  - Added comprehensive Security class with multi-layer protection
+  - Implemented CORS origin validation with configurable allowed domains
+  - Added IP address restrictions with CIDR range support
+  - Implemented rate limiting (100 requests per hour per IP)
+  - Enhanced logging with automatic credential sanitization
+  - Added proxy-aware client IP detection (Cloudflare, X-Forwarded-For support)
+  - Improved authentication with enhanced error handling
+- **⚙️ Advanced Admin Settings**
+  - Added Security Settings section in admin panel
+  - Configurable CORS origins management
+  - IP restriction management interface
+  - Rate limiting toggle with admin controls
+  - Enhanced input validation and sanitization
+- **🔧 Core Improvements**
+  - Refactored WpMcp class with security integration
+  - Enhanced session management with validation
+  - Improved error responses with security headers
+  - Better logging structure with sensitive data protection
+  - Enhanced MCP protocol compliance
+
 ### 1.1.7
 - **🚀 Post Creation Bug Fixes**
   - Fixed HTTP 500 error when creating posts via MCP

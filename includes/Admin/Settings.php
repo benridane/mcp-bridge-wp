@@ -121,6 +121,24 @@ class Settings
             'default' => false
         ]);
 
+        // Security Settings with sanitization
+        register_setting('mcp_bridge_settings', 'mcp_bridge_allowed_origins', [
+            'type' => 'array',
+            'default' => [],
+            'sanitize_callback' => [$this, 'sanitizeAllowedOrigins']
+        ]);
+
+        register_setting('mcp_bridge_settings', 'mcp_bridge_allowed_ips', [
+            'type' => 'array',
+            'default' => [],
+            'sanitize_callback' => [$this, 'sanitizeAllowedIps']
+        ]);
+
+        register_setting('mcp_bridge_settings', 'mcp_bridge_rate_limit_enabled', [
+            'type' => 'boolean',
+            'default' => true
+        ]);
+
         add_settings_section(
             'mcp_bridge_general',
             __('General Settings', 'mcp-bridge'),
@@ -132,6 +150,13 @@ class Settings
             'mcp_bridge_tools',
             __('MCP Tools', 'mcp-bridge'),
             [$this, 'renderToolsSection'],
+            'mcp-bridge-settings'
+        );
+
+        add_settings_section(
+            'mcp_security_settings',
+            __('Security Settings', 'mcp-bridge'),
+            [$this, 'renderSecuritySectionDescription'],
             'mcp-bridge-settings'
         );
 
@@ -157,6 +182,30 @@ class Settings
             [$this, 'renderToolsField'],
             'mcp-bridge-settings',
             'mcp_bridge_tools'
+        );
+
+        add_settings_field(
+            'allowed_origins',
+            __('Allowed CORS Origins', 'mcp-bridge'),
+            [$this, 'renderAllowedOriginsField'],
+            'mcp-bridge-settings',
+            'mcp_security_settings'
+        );
+
+        add_settings_field(
+            'allowed_ips',
+            __('Allowed IP Addresses', 'mcp-bridge'),
+            [$this, 'renderAllowedIpsField'],
+            'mcp-bridge-settings',
+            'mcp_security_settings'
+        );
+
+        add_settings_field(
+            'rate_limit_enabled',
+            __('Enable Rate Limiting', 'mcp-bridge'),
+            [$this, 'renderRateLimitField'],
+            'mcp-bridge-settings',
+            'mcp_security_settings'
         );
     }
 
@@ -247,6 +296,18 @@ class Settings
     }
 
     /**
+     * Render security section description
+     */
+    public function renderSecuritySectionDescription(): void
+    {
+        echo '<p>' . __('Configure security settings for MCP Bridge access control.', 'mcp-bridge') . '</p>';
+        echo '<div class="notice notice-warning inline">';
+        echo '<p><strong>' . __('Warning:', 'mcp-bridge') . '</strong> ' . 
+             __('Incorrect security settings may block legitimate access. Test thoroughly before deploying to production.', 'mcp-bridge') . '</p>';
+        echo '</div>';
+    }
+
+    /**
      * Render logging field
      */
     public function renderLoggingField(): void
@@ -313,6 +374,62 @@ class Settings
     }
 
     /**
+     * Render allowed origins field
+     */
+    public function renderAllowedOriginsField(): void
+    {
+        $origins = get_option('mcp_bridge_allowed_origins', []);
+        $originsText = is_array($origins) ? implode("\n", $origins) : '';
+        ?>
+        <textarea name="mcp_bridge_allowed_origins" id="mcp_bridge_allowed_origins" 
+                  rows="5" cols="50" class="regular-text"><?php echo esc_textarea($originsText); ?></textarea>
+        <p class="description">
+            <?php _e('Enter allowed origins, one per line. Examples:', 'mcp-bridge'); ?><br>
+            <code>https://your-domain.com</code><br>
+            <code>http://localhost:3000</code><br>
+            <?php _e('Leave empty to allow all origins (not recommended for production).', 'mcp-bridge'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render allowed IPs field
+     */
+    public function renderAllowedIpsField(): void
+    {
+        $ips = get_option('mcp_bridge_allowed_ips', []);
+        $ipsText = is_array($ips) ? implode("\n", $ips) : '';
+        ?>
+        <textarea name="mcp_bridge_allowed_ips" id="mcp_bridge_allowed_ips" 
+                  rows="5" cols="50" class="regular-text"><?php echo esc_textarea($ipsText); ?></textarea>
+        <p class="description">
+            <?php _e('Enter allowed IP addresses or CIDR ranges, one per line. Examples:', 'mcp-bridge'); ?><br>
+            <code>192.168.1.100</code><br>
+            <code>10.0.0.0/8</code><br>
+            <?php _e('Leave empty to allow all IPs.', 'mcp-bridge'); ?>
+        </p>
+        <?php
+    }
+
+    /**
+     * Render rate limit field
+     */
+    public function renderRateLimitField(): void
+    {
+        $enabled = get_option('mcp_bridge_rate_limit_enabled', true);
+        ?>
+        <label>
+            <input type="checkbox" name="mcp_bridge_rate_limit_enabled" value="1" 
+                   <?php checked($enabled); ?> />
+            <?php _e('Enable rate limiting (100 requests per hour per IP)', 'mcp-bridge'); ?>
+        </label>
+        <p class="description">
+            <?php _e('Recommended for production environments to prevent abuse.', 'mcp-bridge'); ?>
+        </p>
+        <?php
+    }
+
+    /**
      * Render recent logs
      */
     private function renderRecentLogs(): void
@@ -347,6 +464,62 @@ class Settings
             $toolName = sanitize_text_field($toolName);
             if (isset($allTools[$toolName])) {
                 $sanitized[] = $toolName;
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Sanitize allowed origins
+     */
+    public function sanitizeAllowedOrigins($input): array
+    {
+        if (is_string($input)) {
+            $input = explode("\n", $input);
+        }
+        
+        if (!is_array($input)) {
+            return [];
+        }
+
+        $sanitized = [];
+        foreach ($input as $origin) {
+            $origin = trim(sanitize_text_field($origin));
+            if (!empty($origin)) {
+                // Validate URL format
+                if (filter_var($origin, FILTER_VALIDATE_URL) || 
+                    preg_match('/^https?:\/\/[a-zA-Z0-9.-]+(?::[0-9]+)?$/', $origin)) {
+                    $sanitized[] = $origin;
+                }
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * Sanitize allowed IPs
+     */
+    public function sanitizeAllowedIps($input): array
+    {
+        if (is_string($input)) {
+            $input = explode("\n", $input);
+        }
+        
+        if (!is_array($input)) {
+            return [];
+        }
+
+        $sanitized = [];
+        foreach ($input as $ip) {
+            $ip = trim(sanitize_text_field($ip));
+            if (!empty($ip)) {
+                // Validate IP or CIDR format
+                if (filter_var($ip, FILTER_VALIDATE_IP) || 
+                    preg_match('/^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/', $ip)) {
+                    $sanitized[] = $ip;
+                }
             }
         }
 

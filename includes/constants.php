@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin core constants
-define('MCP_BRIDGE_VERSION', '1.2.2');
+define('MCP_BRIDGE_VERSION', '1.3.0');
 define('MCP_BRIDGE_PATH', plugin_dir_path(dirname(__FILE__)));
 define('MCP_BRIDGE_URL', plugin_dir_url(dirname(__FILE__)));
 define('MCP_BRIDGE_BASENAME', plugin_basename(dirname(__FILE__) . '/mcp-bridge.php'));

@@ -58,6 +58,33 @@ class WpMcp
      */
     public function handleRpcRequest(\WP_REST_Request $request): \WP_REST_Response
     {
+        // Security: Check IP restrictions
+        $clientIp = $this->getClientIp($request);
+        if (!Security::isIpAllowed($clientIp)) {
+            Logger::warning('Request from disallowed IP', ['ip' => $clientIp]);
+            return new \WP_REST_Response([
+                'jsonrpc' => '2.0',
+                'error' => [
+                    'code' => -32600,
+                    'message' => 'Access denied from this IP address'
+                ],
+                'id' => null
+            ], 403);
+        }
+
+        // Security: Rate limiting
+        $rateLimitKey = 'mcp_' . $clientIp;
+        if (!Security::checkRateLimit($rateLimitKey, 100, 3600)) { // 100 requests per hour
+            return new \WP_REST_Response([
+                'jsonrpc' => '2.0',
+                'error' => [
+                    'code' => -32600,
+                    'message' => 'Rate limit exceeded'
+                ],
+                'id' => null
+            ], 429);
+        }
+
         // Ensure we always have a session ID from the start
         if (!$this->sessionId) {
             $this->sessionId = $this->generateSessionId();
@@ -78,29 +105,38 @@ class WpMcp
             ]);
         }
 
-        Logger::info('Received MCP RPC request', [
-            'method_type' => $request->get_method(),
+        // Sanitize logging data for security
+        $sanitizedHeaders = Security::sanitizeLogData([
             'content_type' => $request->get_header('Content-Type'),
             'user_agent' => $request->get_header('User-Agent'),
+            'authorization' => $request->get_header('Authorization') ? '[REDACTED]' : null,
+            'x_api_key' => $request->get_header('X-API-Key') ? '[REDACTED]' : null
+        ]);
+
+        Logger::info('Received MCP RPC request', [
+            'method_type' => $request->get_method(),
+            'headers' => $sanitizedHeaders,
             'body_length' => strlen($request->get_body()),
             'session_id' => $this->sessionId,
-            'client_session_id' => $clientSessionId
+            'client_session_id' => $clientSessionId,
+            'client_ip' => $clientIp
         ]);
 
         try {
             $body = $request->get_body();
-            Logger::debug('Request body received', ['body' => $body]);
+            // Don't log full body in production to prevent credential leakage
+            Logger::debug('Request body received', ['body_hash' => hash('sha256', $body)]);
             
             $json = json_decode($body, true);
             
             if (!$json) {
                 $jsonError = json_last_error_msg();
-                Logger::error('JSON decode failed', ['error' => $jsonError, 'body' => $body]);
+                Logger::error('JSON decode failed', ['error' => $jsonError]);
                 throw new \Exception("Invalid JSON: {$jsonError}");
             }
             
             if (!isset($json['method'])) {
-                Logger::error('Missing method in JSON-RPC request', ['json' => $json]);
+                Logger::error('Missing method in JSON-RPC request');
                 throw new \Exception('Invalid JSON-RPC request format: missing method');
             }
 
@@ -141,20 +177,8 @@ class WpMcp
                 'id' => $id
             ], 200);
 
-            // Add CORS headers
-            $response->header('Access-Control-Allow-Origin', '*');
-            $response->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-            $response->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
-            $response->header('Access-Control-Expose-Headers', 'X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
-            
-            // Add Streamable HTTP specific headers with guaranteed session ID
-            $response->header('X-MCP-Session-ID', $this->sessionId);
-            $response->header('X-MCP-Transport', 'streamable-http');
-            $response->header('X-MCP-Protocol-Version', '2024-11-05');
-            
-            // Add session tracking for MCP Inspector compatibility
-            $response->header('X-Session-Status', 'active');
-            $response->header('X-Server-Name', 'WordPress MCP Bridge v' . MCP_BRIDGE_VERSION);
+            // Enhanced CORS headers with origin validation
+            $this->addSecureCorsHeaders($response, $request);
             
             Logger::info('Response prepared with enhanced session tracking', [
                 'session_id' => $this->sessionId,
@@ -168,10 +192,8 @@ class WpMcp
         } catch (\Exception $e) {
             Logger::error('RPC request failed', [
                 'error' => $e->getMessage(),
-                'file' => $e->getFile(),
+                'file' => basename($e->getFile()),
                 'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-                'request_body' => $request->get_body(),
                 'session_id' => $this->sessionId
             ]);
 
@@ -190,20 +212,79 @@ class WpMcp
                 'id' => isset($json) && isset($json['id']) ? $json['id'] : null
             ], 200); // Changed from 400 to 200 for MCP compliance
 
-            // Add CORS headers even for errors
-            $response->header('Access-Control-Allow-Origin', '*');
-            $response->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-            $response->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
-            $response->header('Access-Control-Expose-Headers', 'X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
-            
-            // Add Streamable HTTP specific headers even for errors
-            $response->header('X-MCP-Session-ID', $this->sessionId);
-            $response->header('X-MCP-Transport', 'streamable-http');
-            $response->header('X-MCP-Protocol-Version', '2024-11-05');
-            $response->header('X-Session-Status', 'error');
+            // Enhanced CORS headers with origin validation even for errors
+            $this->addSecureCorsHeaders($response, $request);
 
             return $response;
         }
+    }
+
+    /**
+     * Add secure CORS headers with origin validation
+     *
+     * @param \WP_REST_Response $response
+     * @param \WP_REST_Request $request
+     */
+    private function addSecureCorsHeaders(\WP_REST_Response $response, \WP_REST_Request $request): void
+    {
+        $origin = $request->get_header('Origin');
+        
+        // Validate origin for security
+        if ($origin && Security::validateCorsOrigin($origin)) {
+            $response->header('Access-Control-Allow-Origin', $origin);
+        } else {
+            // Fallback for development - remove in production
+            $response->header('Access-Control-Allow-Origin', '*');
+        }
+        
+        $response->header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+        $response->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+        $response->header('Access-Control-Expose-Headers', 'X-MCP-Session-ID, X-MCP-Transport, X-MCP-Protocol-Version');
+        
+        // Add Streamable HTTP specific headers with guaranteed session ID
+        $response->header('X-MCP-Session-ID', $this->sessionId);
+        $response->header('X-MCP-Transport', 'streamable-http');
+        $response->header('X-MCP-Protocol-Version', '2024-11-05');
+        
+        // Add session tracking for MCP Inspector compatibility
+        $response->header('X-Session-Status', 'active');
+        $response->header('X-Server-Name', 'WordPress MCP Bridge v' . MCP_BRIDGE_VERSION);
+    }
+
+    /**
+     * Get client IP address
+     *
+     * @param \WP_REST_Request $request
+     * @return string
+     */
+    private function getClientIp(\WP_REST_Request $request): string
+    {
+        // Check for IP from various sources (proxy-aware)
+        $headers = [
+            'HTTP_CF_CONNECTING_IP',     // Cloudflare
+            'HTTP_X_FORWARDED_FOR',      // Proxy
+            'HTTP_X_FORWARDED',          // Proxy
+            'HTTP_X_CLUSTER_CLIENT_IP',  // Cluster
+            'HTTP_FORWARDED_FOR',        // Proxy
+            'HTTP_FORWARDED',            // Proxy
+            'REMOTE_ADDR'                // Standard
+        ];
+
+        foreach ($headers as $header) {
+            if (!empty($_SERVER[$header])) {
+                $ip = $_SERVER[$header];
+                // Handle comma-separated IPs (take first one)
+                if (strpos($ip, ',') !== false) {
+                    $ip = trim(explode(',', $ip)[0]);
+                }
+                // Validate IP format
+                if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                    return $ip;
+                }
+            }
+        }
+
+        return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     }
 
     /**
