@@ -47,9 +47,26 @@ class Settings
      */
     private function init(): void
     {
-        add_action('admin_menu', [$this, 'addAdminMenu']);
+        Logger::info('Settings class initializing', [
+            'is_admin' => is_admin(),
+            'current_user_can_manage_options' => current_user_can('manage_options'),
+            'current_user_id' => get_current_user_id(),
+            'doing_action' => doing_action(),
+            'current_filter' => current_filter()
+        ]);
+        
+        // メニュー登録を直接実行（フックタイミング問題を回避）
+        if (is_admin() && current_user_can('manage_options')) {
+            add_action('admin_menu', [$this, 'addAdminMenu'], 10);
+            Logger::debug('Admin menu hook registered with priority 10');
+        } else {
+            Logger::warning('Admin menu hook not registered - user lacks permissions or not in admin');
+        }
+        
         add_action('admin_init', [$this, 'registerSettings']);
         add_action('admin_enqueue_scripts', [$this, 'enqueueScripts']);
+        
+        Logger::debug('Settings hooks registered');
     }
 
     /**
@@ -57,13 +74,30 @@ class Settings
      */
     public function addAdminMenu(): void
     {
-        add_options_page(
+        Logger::info('addAdminMenu method called', [
+            'is_admin' => is_admin(),
+            'current_user_can_manage_options' => current_user_can('manage_options'),
+            'current_user_id' => get_current_user_id()
+        ]);
+
+        $page_hook = add_options_page(
             __('MCP Bridge Settings', 'mcp-bridge'),
             __('MCP Bridge', 'mcp-bridge'),
             'manage_options',
             'mcp-bridge-settings',
             [$this, 'renderSettingsPage']
         );
+        
+        Logger::info('Admin menu page added', [
+            'page_hook' => $page_hook,
+            'capability_check' => current_user_can('manage_options'),
+            'user_id' => get_current_user_id(),
+            'function_exists_add_options_page' => function_exists('add_options_page')
+        ]);
+        
+        if (!$page_hook) {
+            Logger::error('Failed to add admin menu page');
+        }
     }
 
     /**

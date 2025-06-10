@@ -79,11 +79,16 @@ class Plugin
         // Load REST API configuration
         $this->loadRestApi();
 
-        // Admin initialization
+        // Admin settings initialization - Settings クラスがadmin_menuフックを自分で管理
         add_action('admin_init', [$this, 'initAdmin']);
 
         // Plugin loaded
         add_action('plugins_loaded', [$this, 'pluginsLoaded']);
+        
+        // Initialize admin settings early
+        if (is_admin()) {
+            add_action('init', [$this, 'initAdminEarly']);
+        }
     }
 
     /**
@@ -97,6 +102,15 @@ class Plugin
             Logger::debug('rest-api.php ファイルが Plugin.php から読み込まれました');
         } else {
             Logger::error('rest-api.php ファイルが見つかりません: ' . $restApiFile);
+        }
+        
+        // Load debug helper in development mode
+        if (MCP_BRIDGE_DEBUG) {
+            $debugFile = MCP_BRIDGE_INCLUDES_PATH . 'debug-admin-menu.php';
+            if (file_exists($debugFile)) {
+                require_once $debugFile;
+                Logger::debug('Admin menu debug helper loaded');
+            }
         }
     }
 
@@ -144,6 +158,27 @@ class Plugin
     }
 
     /**
+     * Initialize admin menu
+     */
+    public function initAdminMenu(): void
+    {
+        if (!is_admin()) {
+            return;
+        }
+
+        Logger::info('initAdminMenu called', [
+            'is_admin' => is_admin(),
+            'current_user_can_manage_options' => current_user_can('manage_options'),
+            'current_user_id' => get_current_user_id()
+        ]);
+
+        // Initialize admin settings page for menu creation
+        \McpBridge\Admin\Settings::getInstance();
+        
+        Logger::debug('Admin menu initialized');
+    }
+
+    /**
      * Initialize admin interface
      */
     public function initAdmin(): void
@@ -152,10 +187,29 @@ class Plugin
             return;
         }
 
-        // Initialize admin settings page
+        // Admin settings are already initialized in initAdminMenu
+        Logger::debug('Admin settings initialized');
+    }
+
+    /**
+     * Initialize admin early
+     */
+    public function initAdminEarly(): void
+    {
+        if (!is_admin()) {
+            return;
+        }
+
+        Logger::info('initAdminEarly called', [
+            'is_admin' => is_admin(),
+            'current_user_can_manage_options' => current_user_can('manage_options'),
+            'current_user_id' => get_current_user_id()
+        ]);
+
+        // Initialize admin settings page early
         \McpBridge\Admin\Settings::getInstance();
         
-        Logger::debug('Admin interface initialized with settings page');
+        Logger::debug('Admin early initialization completed');
     }
 
     /**
