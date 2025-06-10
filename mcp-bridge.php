@@ -26,6 +26,11 @@ require_once plugin_dir_path(__FILE__) . 'includes/constants.php';
 // Load autoloader
 require_once MCP_BRIDGE_INCLUDES_PATH . 'autoloader.php';
 
+// Verify plugin version consistency
+if (!defined('MCP_BRIDGE_VERSION')) {
+    wp_die('MCP Bridge: Version constant not defined. Please check plugin installation.');
+}
+
 // Initialize plugin
 use McpBridge\Core\Plugin;
 
