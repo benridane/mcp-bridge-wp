@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin core constants
-define('MCP_BRIDGE_VERSION', '1.3.0');
+define('MCP_BRIDGE_VERSION', '1.4.0');
 define('MCP_BRIDGE_PATH', plugin_dir_path(dirname(__FILE__)));
 define('MCP_BRIDGE_URL', plugin_dir_url(dirname(__FILE__)));
 define('MCP_BRIDGE_BASENAME', plugin_basename(dirname(__FILE__) . '/mcp-bridge.php'));
@@ -30,6 +30,7 @@ define('MCP_BRIDGE_REST_ROUTE_RPC', '/rpc');
 // Debug and logging configuration
 define('MCP_BRIDGE_DEBUG', defined('WP_DEBUG') && WP_DEBUG);
 define('MCP_BRIDGE_LOG_ENABLED', true);
+define('MCP_BRIDGE_DEBUG_ADMIN', false); // Set to true only for development debugging
 
 // Security configuration
 define('MCP_BRIDGE_CAPABILITY_REQUIRED', 'edit_posts');

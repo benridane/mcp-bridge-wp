@@ -218,10 +218,30 @@ class RegisterMcpTool
         
         // Set parameters based on method
         if ($method === 'GET') {
+            // Collect all query parameters that are not part of the route
+            $queryParams = [];
             foreach ($params as $key => $value) {
-                if (!str_contains($route, "{{$key}}")) {
-                    $request->set_query_params([$key => $value]);
+                // Check if this parameter is used in the WordPress route pattern
+                if (!preg_match('/\(\?P<' . preg_quote($key, '/') . '>[^)]+\)/', $route)) {
+                    $queryParams[$key] = $value;
                 }
+            }
+            
+            // 🔧 標準WordPress準拠: contextパラメータの自動設定を削除
+            // WordPress標準では、下書きアクセスにはedit_posts権限が必要
+            // context=editは明示的に指定された場合のみ使用
+            if (str_contains($processedRoute, '/posts') || str_contains($processedRoute, '/pages')) {
+                // デフォルトのper_pageを設定（WordPress標準動作）
+                if (!isset($queryParams['per_page'])) {
+                    $queryParams['per_page'] = 10;
+                    Logger::debug("Added default per_page=10 for posts/pages endpoint");
+                }
+            }
+            
+            // Set all query parameters at once
+            if (!empty($queryParams)) {
+                $request->set_query_params($queryParams);
+                Logger::debug("Query parameters set", ['query_params' => $queryParams]);
             }
         } else {
             // For POST/PUT/PATCH, set body parameters and also set JSON body
@@ -269,7 +289,8 @@ class RegisterMcpTool
             Logger::info("REST API success", [
                 'route' => $processedRoute,
                 'method' => $method,
-                'response_status' => $response->get_status()
+                'response_status' => $response->get_status(),
+                'data_count' => is_array($data) ? count($data) : 'not_array'
             ]);
             
             // Return MCP-compliant format
@@ -302,8 +323,8 @@ class RegisterMcpTool
      */
     private static function processRouteParameters(string $route, array $params): string
     {
-        // Replace named parameters like {id} with actual values
-        return preg_replace_callback('/\{(\w+)\}/', function ($matches) use ($params) {
+        // Replace WordPress-style named parameters like (?P<id>[\d]+) with actual values
+        return preg_replace_callback('/\(\?P<(\w+)>[^)]+\)/', function ($matches) use ($params) {
             $paramName = $matches[1];
             return $params[$paramName] ?? $matches[0];
         }, $route);

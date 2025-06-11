@@ -124,6 +124,24 @@ class Plugin
 
         // Register default tools
         $this->registerDefaultTools();
+
+        // Initialize Phase 2 Tools
+        $this->initializePhase2Tools();
+    }
+
+    /**
+     * Initialize Phase 2 Tools (Posts and Pages)
+     */
+    private function initializePhase2Tools(): void
+    {
+        // Initialize Posts tools
+        new \McpBridge\Tools\Posts\PostsTools();
+        new \McpBridge\Tools\Posts\PostMetaTools();
+
+        // Initialize Pages tools  
+        new \McpBridge\Tools\Pages\PagesTools();
+
+        Logger::info('Phase 2 tools initialized (Posts and Pages)');
     }
 
     /**
@@ -241,13 +259,13 @@ class Plugin
             'parameters' => []
         ]);
 
-        // Get posts tool (migrated from existing code)
+        // Get posts tool (fixed route and improved parameters)
         new RegisterMcpTool([
             'name' => 'wp_get_posts',
-            'description' => 'Get WordPress posts with optional filtering',
+            'description' => 'Get WordPress posts with optional filtering and pagination',
             'type' => 'read',
             'rest_alias' => [
-                'route' => '/posts',
+                'route' => '/wp/v2/posts',  // ✅ 修正: 正しいWordPress REST APIルート
                 'method' => 'GET'
             ],
             'parameters' => [
@@ -260,19 +278,31 @@ class Plugin
                 ],
                 'page' => [
                     'type' => 'integer', 
-                    'description' => 'Page number',
+                    'description' => 'Page number for pagination',
                     'minimum' => 1,
                     'default' => 1
                 ],
                 'search' => [
                     'type' => 'string', 
-                    'description' => 'Search term'
+                    'description' => 'Search term to filter posts'
                 ],
                 'status' => [
                     'type' => 'string', 
-                    'description' => 'Post status',
-                    'enum' => ['publish', 'draft', 'private', 'pending', 'future'],
+                    'description' => 'Post status to filter by',
+                    'enum' => ['publish', 'draft', 'private', 'pending', 'future', 'any'],
                     'default' => 'publish'
+                ],
+                'orderby' => [
+                    'type' => 'string',
+                    'description' => 'Sort posts by field',
+                    'enum' => ['date', 'title', 'modified', 'menu_order', 'author'],
+                    'default' => 'date'
+                ],
+                'order' => [
+                    'type' => 'string',
+                    'description' => 'Sort order',
+                    'enum' => ['asc', 'desc'],
+                    'default' => 'desc'
                 ]
             ]
         ]);

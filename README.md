@@ -32,9 +32,26 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
 
 ## Available Tools
 
+### Phase 1 (Core)
 - `wp_get_site_info` - Get basic WordPress site information
 - `wp_get_posts` - Retrieve WordPress posts with filtering options
 - `wp_create_post` - Create new WordPress posts
+
+### Phase 2 (Posts & Pages) - New in v1.4.0
+- `wp_posts_search` - Search and filter WordPress posts with pagination
+- `wp_get_post` - Get a WordPress post by ID
+- `wp_update_post` - Update an existing WordPress post
+- `wp_delete_post` - Delete a WordPress post
+- `wp_get_post_meta` - Get metadata for a WordPress post
+- `wp_get_post_meta_value` - Get a specific post meta value by meta ID
+- `wp_add_post_meta` - Add metadata to a WordPress post
+- `wp_update_post_meta` - Update post metadata by meta ID
+- `wp_delete_post_meta` - Delete post metadata by meta ID
+- `wp_pages_search` - Search and filter WordPress pages with pagination
+- `wp_get_page` - Get a WordPress page by ID
+- `wp_add_page` - Create a new WordPress page
+- `wp_update_page` - Update an existing WordPress page
+- `wp_delete_page` - Delete a WordPress page
 
 ## Installation
 
@@ -89,6 +106,20 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.4.0
+- **🚀 Phase 2 Implementation Complete - Posts & Pages Tools**
+  - Added comprehensive Posts tools with full CRUD operations
+  - Implemented `wp_posts_search` for advanced post filtering and pagination
+  - Added `wp_get_post`, `wp_update_post`, `wp_delete_post` for single post operations
+  - Implemented complete Post Meta management tools
+  - Added `wp_get_post_meta`, `wp_add_post_meta`, `wp_update_post_meta`, `wp_delete_post_meta`
+  - Implemented comprehensive Pages tools with hierarchical support
+  - Added `wp_pages_search`, `wp_get_page`, `wp_add_page`, `wp_update_page`, `wp_delete_page`
+  - Enhanced REST API alias integration for all WordPress standard endpoints
+  - Improved tool organization with dedicated namespace structure
+  - All tools maintain existing functionality while adding advanced features
+  - Full backward compatibility maintained for existing implementations
 
 ### 1.3.0
 - **🛡️ Enhanced Security Features**

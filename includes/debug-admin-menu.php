@@ -2,8 +2,10 @@
 /**
  * MCP Bridge Admin Menu Debug Helper
  * 
- * This file can be included to debug admin menu registration issues.
- * Only load this in development/debugging scenarios.
+ * This file is for development/debugging purposes only.
+ * It should not be loaded in production environments.
+ * 
+ * @package McpBridge
  */
 
 // Prevent direct access
@@ -11,9 +13,19 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Only load debug helpers in development mode or when explicitly enabled
+if (!defined('MCP_BRIDGE_DEBUG_ADMIN') || !MCP_BRIDGE_DEBUG_ADMIN) {
+    return;
+}
+
 // Debug admin menu registration
 add_action('admin_menu', function() {
     global $menu, $submenu;
+    
+    // Only log if WP_DEBUG is enabled
+    if (!defined('WP_DEBUG') || !WP_DEBUG) {
+        return;
+    }
     
     error_log('=== MCP Bridge Admin Menu Debug ===');
     error_log('Current user can manage_options: ' . (current_user_can('manage_options') ? 'YES' : 'NO'));
@@ -46,12 +58,14 @@ add_action('admin_menu', function() {
 
 // Debug WordPress admin initialization
 add_action('admin_init', function() {
-    error_log('MCP Bridge: admin_init executed - can manage options: ' . (current_user_can('manage_options') ? 'YES' : 'NO'));
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('MCP Bridge: admin_init executed - can manage options: ' . (current_user_can('manage_options') ? 'YES' : 'NO'));
+    }
 }, 999);
 
 // Debug when admin notices might be shown
 add_action('admin_notices', function() {
-    if (current_user_can('manage_options')) {
+    if (current_user_can('manage_options') && defined('WP_DEBUG') && WP_DEBUG) {
         error_log('MCP Bridge: admin_notices - user can manage options');
     }
 }, 1);
