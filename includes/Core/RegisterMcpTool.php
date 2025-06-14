@@ -63,9 +63,22 @@ class RegisterMcpTool
             'parameters' => [],
             'rest_alias' => null,
             'callback' => null,
+            'handler' => null,
+            'inputSchema' => null,
         ];
 
-        return array_merge($defaults, $config);
+        // Map handler to callback if provided
+        $config = array_merge($defaults, $config);
+        if (isset($config['handler']) && $config['handler'] !== null) {
+            $config['callback'] = $config['handler'];
+        }
+
+        // Map inputSchema to parameters if provided
+        if (isset($config['inputSchema']) && !isset($config['parameters'])) {
+            $config['parameters'] = $config['inputSchema'];
+        }
+
+        return $config;
     }
 
     /**
@@ -78,6 +91,11 @@ class RegisterMcpTool
         if (isset(self::$tools[$toolName])) {
             Logger::warning("Tool '{$toolName}' is already registered", ['tool' => $toolName]);
             return;
+        }
+
+        // Handle both 'handler' and 'callback' parameters
+        if (isset($this->config['handler']) && !isset($this->config['callback'])) {
+            $this->config['callback'] = $this->config['handler'];
         }
 
         self::$tools[$toolName] = $this->config;
@@ -135,6 +153,15 @@ class RegisterMcpTool
             throw new \Exception("Tool '{$name}' is disabled");
         }
 
+        // Debug log for tool configuration
+        Logger::debug("Tool configuration for {$name}", [
+            'has_callback' => isset($tool['callback']),
+            'has_handler' => isset($tool['handler']),
+            'has_rest_alias' => isset($tool['rest_alias']),
+            'callback_callable' => isset($tool['callback']) ? is_callable($tool['callback']) : false,
+            'tool_keys' => array_keys($tool)
+        ]);
+
         // Check user capabilities - use current user ID if set
         $currentUser = wp_get_current_user();
         if (!$currentUser || !$currentUser->exists()) {
@@ -158,14 +185,23 @@ class RegisterMcpTool
         ]);
 
         // If tool has a REST alias, use that
-        if ($tool['rest_alias']) {
+        if (!empty($tool['rest_alias'])) {
             return self::executeRestAlias($tool, $params);
         }
 
         // If tool has a callback, use that
-        if ($tool['callback'] && is_callable($tool['callback'])) {
+        if (isset($tool['callback']) && is_callable($tool['callback'])) {
             return call_user_func($tool['callback'], $params);
         }
+
+        // Additional debug information for troubleshooting
+        Logger::error("Tool has no executable handler", [
+            'tool' => $name,
+            'has_callback' => isset($tool['callback']),
+            'callback_type' => isset($tool['callback']) ? gettype($tool['callback']) : 'not set',
+            'is_callable' => isset($tool['callback']) ? is_callable($tool['callback']) : false,
+            'has_rest_alias' => !empty($tool['rest_alias'])
+        ]);
 
         throw new \Exception("Tool '{$name}' has no executable handler");
     }
@@ -374,57 +410,86 @@ class RegisterMcpTool
                 continue;
             }
 
-            // Ensure properties is always an object (not array) for Zod validation
-            $properties = [];
-            $required = [];
-            
-            if (isset($tool['parameters']) && is_array($tool['parameters'])) {
-                foreach ($tool['parameters'] as $paramName => $paramSchema) {
-                    // Validate parameter schema structure
-                    if (!isset($paramSchema['type'])) {
-                        Logger::warning('Tool parameter missing type in manifest', [
-                            'tool' => $name,
-                            'parameter' => $paramName
-                        ]);
-                        continue;
-                    }
-                    
-                    $properties[$paramName] = [
-                        'type' => $paramSchema['type'],
-                        'description' => $paramSchema['description'] ?? ''
-                    ];
-                    
-                    // Add additional schema properties if present
-                    if (isset($paramSchema['enum'])) {
-                        $properties[$paramName]['enum'] = $paramSchema['enum'];
-                    }
-                    if (isset($paramSchema['default'])) {
-                        $properties[$paramName]['default'] = $paramSchema['default'];
-                    }
-                    if (isset($paramSchema['minimum'])) {
-                        $properties[$paramName]['minimum'] = $paramSchema['minimum'];
-                    }
-                    if (isset($paramSchema['maximum'])) {
-                        $properties[$paramName]['maximum'] = $paramSchema['maximum'];
-                    }
-                    
-                    // Collect required parameters
-                    if (isset($paramSchema['required']) && $paramSchema['required'] === true) {
-                        $required[] = $paramName;
-                    }
-                }
+            // Debug logging for schema processing
+            if (strpos($name, 'meta') !== false) {
+                Logger::debug("Processing manifest for tool: {$name}", [
+                    'has_inputSchema' => isset($tool['inputSchema']),
+                    'has_parameters' => isset($tool['parameters']),
+                    'inputSchema_type' => isset($tool['inputSchema']) ? gettype($tool['inputSchema']) : 'not set',
+                    'parameters_type' => isset($tool['parameters']) ? gettype($tool['parameters']) : 'not set'
+                ]);
             }
 
-            $inputSchema = [
-                'type' => 'object',
-                'properties' => (object)$properties, // Explicitly cast to object for Zod validation
-                'additionalProperties' => true, // Allow additional properties for better MCP client compatibility
-                '$schema' => 'http://json-schema.org/draft-07/schema#' // Add JSON Schema metadata
-            ];
-            
-            // Only add required array if there are required fields
-            if (!empty($required)) {
-                $inputSchema['required'] = $required;
+            // Check if inputSchema is already provided in the expected format
+            if (isset($tool['inputSchema']) && is_array($tool['inputSchema']) && 
+                isset($tool['inputSchema']['type']) && $tool['inputSchema']['type'] === 'object' &&
+                isset($tool['inputSchema']['properties'])) {
+                // Use the inputSchema directly if it's already in the correct format
+                $inputSchema = $tool['inputSchema'];
+            } else {
+                // Otherwise, build from parameters
+                $properties = [];
+                $required = [];
+                
+                if (isset($tool['parameters']) && is_array($tool['parameters'])) {
+                    // Check if parameters is already a schema object
+                    if (isset($tool['parameters']['type']) && $tool['parameters']['type'] === 'object' && 
+                        isset($tool['parameters']['properties'])) {
+                        // It's already a schema, use it directly
+                        $inputSchema = $tool['parameters'];
+                    } else if (isset($tool['parameters']['type']) && $tool['parameters']['type'] === 'object') {
+                        // It's a schema object but without properties field - use it directly
+                        $inputSchema = $tool['parameters'];
+                    } else {
+                        // Build schema from individual parameters
+                        foreach ($tool['parameters'] as $paramName => $paramSchema) {
+                            // Validate parameter schema structure
+                            if (!isset($paramSchema['type'])) {
+                                Logger::warning('Tool parameter missing type in manifest', [
+                                    'tool' => $name,
+                                    'parameter' => $paramName
+                                ]);
+                                continue;
+                            }
+                            
+                            $properties[$paramName] = [
+                                'type' => $paramSchema['type'],
+                                'description' => $paramSchema['description'] ?? ''
+                            ];
+                            
+                            // Add additional schema properties if present
+                            if (isset($paramSchema['enum'])) {
+                                $properties[$paramName]['enum'] = $paramSchema['enum'];
+                            }
+                            if (isset($paramSchema['default'])) {
+                                $properties[$paramName]['default'] = $paramSchema['default'];
+                            }
+                            if (isset($paramSchema['minimum'])) {
+                                $properties[$paramName]['minimum'] = $paramSchema['minimum'];
+                            }
+                            if (isset($paramSchema['maximum'])) {
+                                $properties[$paramName]['maximum'] = $paramSchema['maximum'];
+                            }
+                            
+                            // Collect required parameters
+                            if (isset($paramSchema['required']) && $paramSchema['required'] === true) {
+                                $required[] = $paramName;
+                            }
+                        }
+                        
+                        $inputSchema = [
+                            'type' => 'object',
+                            'properties' => (object)$properties, // Explicitly cast to object for Zod validation
+                            'additionalProperties' => true, // Allow additional properties for better MCP client compatibility
+                            '$schema' => 'http://json-schema.org/draft-07/schema#' // Add JSON Schema metadata
+                        ];
+                        
+                        // Only add required array if there are required fields
+                        if (!empty($required)) {
+                            $inputSchema['required'] = $required;
+                        }
+                    }
+                }
             }
 
             $manifest['tools'][] = [

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: MCP Bridge
  * Description: MCP (Model Context Protocol) interface for WordPress with Application Password authentication.
- * Version: 1.4.0
+ * Version: 1.5.3
  * Author: benridane
  * Author URI: https://github.com/benridane
  * Plugin URI: https://github.com/benridane/mcp-bridge-wp

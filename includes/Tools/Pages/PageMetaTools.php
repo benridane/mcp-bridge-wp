@@ -1,20 +1,20 @@
 <?php
 /**
- * Post Meta Tools for MCP Bridge
+ * Page Meta Tools for MCP Bridge
  *
- * @package McpBridge\Tools\Posts
+ * @package McpBridge\Tools\Pages
  */
 
-namespace McpBridge\Tools\Posts;
+namespace McpBridge\Tools\Pages;
 
 use McpBridge\API\Base\ToolBase;
 use McpBridge\Core\RegisterMcpTool;
 use McpBridge\Core\Logger;
 
 /**
- * Post Meta Tools Class - Handles WordPress post metadata operations
+ * Page Meta Tools Class - Handles WordPress page metadata operations
  */
-class PostMetaTools extends ToolBase
+class PageMetaTools extends ToolBase
 {
     /**
      * Constructor
@@ -27,23 +27,23 @@ class PostMetaTools extends ToolBase
     }
 
     /**
-     * Initialize all post meta-related tools
+     * Initialize all page meta-related tools
      */
     public function initializeTools(): void
     {
-        Logger::info('Registering Post Meta tools');
+        Logger::info('Registering Page Meta tools');
 
-        // wp_get_post_meta
+        // wp_get_page_meta
         new RegisterMcpTool([
-            'name' => 'wp_get_post_meta',
-            'description' => 'Get metadata for a WordPress post',
+            'name' => 'wp_get_page_meta',
+            'description' => 'Get metadata for a WordPress page',
             'type' => 'read',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'post_id' => [
+                    'page_id' => [
                         'type' => 'integer',
-                        'description' => 'Post ID to get metadata for',
+                        'description' => 'Page ID to get metadata for',
                         'required' => true
                     ],
                     'key' => [
@@ -57,19 +57,19 @@ class PostMetaTools extends ToolBase
                     ]
                 ]
             ],
-            'handler' => [$this, 'getPostMeta']
+            'handler' => [$this, 'getPageMeta']
         ]);
-        // wp_add_post_meta
+        // wp_add_page_meta
         new RegisterMcpTool([
-            'name' => 'wp_add_post_meta',
-            'description' => 'Add metadata to a WordPress post',
+            'name' => 'wp_add_page_meta',
+            'description' => 'Add metadata to a WordPress page',
             'type' => 'create',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'post_id' => [
+                    'page_id' => [
                         'type' => 'integer',
-                        'description' => 'Post ID to add metadata to',
+                        'description' => 'Page ID to add metadata to',
                         'required' => true
                     ],
                     'key' => [
@@ -89,19 +89,19 @@ class PostMetaTools extends ToolBase
                     ]
                 ]
             ],
-            'handler' => [$this, 'addPostMeta']
+            'handler' => [$this, 'addPageMeta']
         ]);
-        // wp_update_post_meta
+        // wp_update_page_meta
         new RegisterMcpTool([
-            'name' => 'wp_update_post_meta',
-            'description' => 'Update post metadata',
+            'name' => 'wp_update_page_meta',
+            'description' => 'Update page metadata',
             'type' => 'update',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'post_id' => [
+                    'page_id' => [
                         'type' => 'integer',
-                        'description' => 'Post ID',
+                        'description' => 'Page ID',
                         'required' => true
                     ],
                     'key' => [
@@ -120,19 +120,19 @@ class PostMetaTools extends ToolBase
                     ]
                 ]
             ],
-            'handler' => [$this, 'updatePostMeta']
+            'handler' => [$this, 'updatePageMeta']
         ]);
-        // wp_delete_post_meta
+        // wp_delete_page_meta
         new RegisterMcpTool([
-            'name' => 'wp_delete_post_meta',
-            'description' => 'Delete post metadata',
+            'name' => 'wp_delete_page_meta',
+            'description' => 'Delete page metadata',
             'type' => 'delete',
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
-                    'post_id' => [
+                    'page_id' => [
                         'type' => 'integer',
-                        'description' => 'Post ID',
+                        'description' => 'Page ID',
                         'required' => true
                     ],
                     'key' => [
@@ -146,68 +146,68 @@ class PostMetaTools extends ToolBase
                     ]
                 ]
             ],
-            'handler' => [$this, 'deletePostMeta']
+            'handler' => [$this, 'deletePageMeta']
         ]);
-        Logger::info('Post Meta tools registered successfully');
+        Logger::info('Page Meta tools registered successfully');
     }
 
     /**
-     * Get post metadata
+     * Get page metadata
      */
-    public function getPostMeta($arguments)
+    public function getPageMeta($arguments)
     {
-        $post_id = intval($arguments['post_id'] ?? 0);
+        $page_id = intval($arguments['page_id'] ?? 0);
         $key = $arguments['key'] ?? '';
         $single = $arguments['single'] ?? false;
 
-        if (!$post_id) {
-            throw new \Exception('Post ID is required');
+        if (!$page_id) {
+            throw new \Exception('Page ID is required');
         }
 
-        $post = get_post($post_id);
-        if (!$post) {
-            throw new \Exception('Post not found');
+        $page = get_post($page_id);
+        if (!$page || $page->post_type !== 'page') {
+            throw new \Exception('Page not found');
         }
 
         if ($key) {
-            $meta_value = get_post_meta($post_id, $key, $single);
+            $meta_value = get_post_meta($page_id, $key, $single);
         } else {
-            $meta_value = get_post_meta($post_id);
+            $meta_value = get_post_meta($page_id);
         }
 
         return [
-            'post_id' => $post_id,
+            'page_id' => $page_id,
             'meta' => $meta_value
         ];
     }
 
     /**
-     * Add post metadata
+     * Add page metadata
      */
-    public function addPostMeta($arguments)
+    public function addPageMeta($arguments)
     {
-        $post_id = intval($arguments['post_id'] ?? 0);
+        $page_id = intval($arguments['page_id'] ?? 0);
         $key = $arguments['key'] ?? '';
         $value = $arguments['value'] ?? '';
         $unique = $arguments['unique'] ?? false;
 
-        if (!$post_id || !$key) {
-            throw new \Exception('Post ID and key are required');
+        if (!$page_id || !$key) {
+            throw new \Exception('Page ID and key are required');
         }
 
-        $post = get_post($post_id);
-        if (!$post) {
-            throw new \Exception('Post not found');
+        $page = get_post($page_id);
+        if (!$page || $page->post_type !== 'page') {
+            throw new \Exception('Page not found');
         }
 
-        $result = add_post_meta($post_id, $key, $value, $unique);
+        $result = add_post_meta($page_id, $key, $value, $unique);
 
         if ($result === false) {
-            throw new \Exception('Failed to add post meta');
+            throw new \Exception('Failed to add page meta');
         }
 
         return [
-            'post_id' => $post_id,
+            'page_id' => $page_id,
             'key' => $key,
             'value' => $value,
             'meta_id' => $result
@@ -215,32 +215,32 @@ class PostMetaTools extends ToolBase
     }
 
     /**
-     * Update post metadata
+     * Update page metadata
      */
-    public function updatePostMeta($arguments)
+    public function updatePageMeta($arguments)
     {
-        $post_id = intval($arguments['post_id'] ?? 0);
+        $page_id = intval($arguments['page_id'] ?? 0);
         $key = $arguments['key'] ?? '';
         $value = $arguments['value'] ?? '';
         $prev_value = $arguments['prev_value'] ?? '';
 
-        if (!$post_id || !$key) {
-            throw new \Exception('Post ID and key are required');
+        if (!$page_id || !$key) {
+            throw new \Exception('Page ID and key are required');
         }
 
-        $post = get_post($post_id);
-        if (!$post) {
-            throw new \Exception('Post not found');
+        $page = get_post($page_id);
+        if (!$page || $page->post_type !== 'page') {
+            throw new \Exception('Page not found');
         }
 
-        $result = update_post_meta($post_id, $key, $value, $prev_value);
+        $result = update_post_meta($page_id, $key, $value, $prev_value);
 
         if ($result === false) {
-            throw new \Exception('Failed to update post meta');
+            throw new \Exception('Failed to update page meta');
         }
 
         return [
-            'post_id' => $post_id,
+            'page_id' => $page_id,
             'key' => $key,
             'value' => $value,
             'updated' => true
@@ -248,31 +248,31 @@ class PostMetaTools extends ToolBase
     }
 
     /**
-     * Delete post metadata
+     * Delete page metadata
      */
-    public function deletePostMeta($arguments)
+    public function deletePageMeta($arguments)
     {
-        $post_id = intval($arguments['post_id'] ?? 0);
+        $page_id = intval($arguments['page_id'] ?? 0);
         $key = $arguments['key'] ?? '';
         $value = $arguments['value'] ?? '';
 
-        if (!$post_id || !$key) {
-            throw new \Exception('Post ID and key are required');
+        if (!$page_id || !$key) {
+            throw new \Exception('Page ID and key are required');
         }
 
-        $post = get_post($post_id);
-        if (!$post) {
-            throw new \Exception('Post not found');
+        $page = get_post($page_id);
+        if (!$page || $page->post_type !== 'page') {
+            throw new \Exception('Page not found');
         }
 
-        $result = delete_post_meta($post_id, $key, $value);
+        $result = delete_post_meta($page_id, $key, $value);
 
         if (!$result) {
-            throw new \Exception('Failed to delete post meta');
+            throw new \Exception('Failed to delete page meta');
         }
 
         return [
-            'post_id' => $post_id,
+            'page_id' => $page_id,
             'key' => $key,
             'deleted' => true
         ];

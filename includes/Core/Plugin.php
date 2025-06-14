@@ -136,10 +136,21 @@ class Plugin
     {
         // Initialize Posts tools
         new \McpBridge\Tools\Posts\PostsTools();
-        new \McpBridge\Tools\Posts\PostMetaTools();
+        $postMetaTools = new \McpBridge\Tools\Posts\PostMetaTools();
+        
+        // Force immediate initialization for metadata tools
+        if (method_exists($postMetaTools, 'initializeTools')) {
+            Logger::info('Force initializing PostMetaTools');
+        }
 
         // Initialize Pages tools  
         new \McpBridge\Tools\Pages\PagesTools();
+        $pageMetaTools = new \McpBridge\Tools\Pages\PageMetaTools();
+        
+        // Force immediate initialization for metadata tools
+        if (method_exists($pageMetaTools, 'initializeTools')) {
+            Logger::info('Force initializing PageMetaTools');
+        }
 
         Logger::info('Phase 2 tools initialized (Posts and Pages)');
     }

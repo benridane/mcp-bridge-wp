@@ -37,7 +37,7 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
 - `wp_get_posts` - Retrieve WordPress posts with filtering options
 - `wp_create_post` - Create new WordPress posts
 
-### Phase 2 (Posts & Pages) - New in v1.4.0
+### Phase 2 (Posts & Pages) - Complete in v1.5.0+
 - `wp_posts_search` - Search and filter WordPress posts with pagination
 - `wp_get_post` - Get a WordPress post by ID
 - `wp_update_post` - Update an existing WordPress post
@@ -52,6 +52,10 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
 - `wp_add_page` - Create a new WordPress page
 - `wp_update_page` - Update an existing WordPress page
 - `wp_delete_page` - Delete a WordPress page
+- `wp_get_page_meta` - Get metadata for a WordPress page
+- `wp_add_page_meta` - Add metadata to a WordPress page
+- `wp_update_page_meta` - Update page metadata
+- `wp_delete_page_meta` - Delete page metadata
 
 ## Installation
 
@@ -106,6 +110,42 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.5.4
+- **🔧 Build Process Optimization**
+  - Fixed oversized release files (reduced from 978MB to 44KB - 99.99% reduction)
+  - Improved create-release.sh script to exclude unnecessary files
+  - Removed dist/, reference-code/, and nested zip files from releases
+  - Optimized build process for production deployment
+
+### 1.5.3
+- **🐛 Metadata API Bug Fixes**
+  - Fixed inputSchema parameter mapping in RegisterMcpTool
+  - Corrected empty properties issue in tools/list manifest
+  - Improved metadata tool registration
+  - All metadata tools now properly expose their parameters
+
+### 1.5.2
+- **🔧 Tool Registration Fixes**
+  - Fixed "no executable handler" error for metadata tools
+  - Added support for 'handler' parameter in RegisterMcpTool
+  - Added support for 'inputSchema' parameter mapping
+  - Improved tool registration compatibility
+
+### 1.5.1
+- **🐛 Metadata API Implementation Fix**
+  - Changed Post and Page metadata tools from REST API aliases to direct WordPress functions
+  - Fixed WordPress REST API metadata endpoint limitations (disabled by default)
+  - Implemented direct handlers using get_post_meta, add_post_meta, update_post_meta, delete_post_meta
+  - Improved error handling for metadata operations
+
+### 1.5.0
+- **🚀 Phase 2 Complete - Page Metadata Tools**
+  - Added complete Page Metadata management tools
+  - Implemented `wp_get_page_meta`, `wp_add_page_meta`, `wp_update_page_meta`, `wp_delete_page_meta`
+  - Achieved 100% Phase 2 completion with all Posts and Pages APIs
+  - Enhanced tool organization with PageMetaTools class
+  - Full parity between Post and Page metadata operations
 
 ### 1.4.0
 - **🚀 Phase 2 Implementation Complete - Posts & Pages Tools**
