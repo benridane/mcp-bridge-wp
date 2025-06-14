@@ -38,24 +38,48 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
 - `wp_create_post` - Create new WordPress posts
 
 ### Phase 2 (Posts & Pages) - Complete in v1.5.0+
-- `wp_posts_search` - Search and filter WordPress posts with pagination
-- `wp_get_post` - Get a WordPress post by ID
-- `wp_update_post` - Update an existing WordPress post
-- `wp_delete_post` - Delete a WordPress post
-- `wp_get_post_meta` - Get metadata for a WordPress post
-- `wp_get_post_meta_value` - Get a specific post meta value by meta ID
-- `wp_add_post_meta` - Add metadata to a WordPress post
-- `wp_update_post_meta` - Update post metadata by meta ID
-- `wp_delete_post_meta` - Delete post metadata by meta ID
-- `wp_pages_search` - Search and filter WordPress pages with pagination
-- `wp_get_page` - Get a WordPress page by ID
-- `wp_add_page` - Create a new WordPress page
-- `wp_update_page` - Update an existing WordPress page
-- `wp_delete_page` - Delete a WordPress page
-- `wp_get_page_meta` - Get metadata for a WordPress page
-- `wp_add_page_meta` - Add metadata to a WordPress page
-- `wp_update_page_meta` - Update page metadata
-- `wp_delete_page_meta` - Delete page metadata
+- **Posts API** (5 tools)
+  - `wp_posts_search` - Search and filter WordPress posts with pagination
+  - `wp_get_post` - Get a WordPress post by ID
+  - `wp_update_post` - Update an existing WordPress post
+  - `wp_delete_post` - Delete a WordPress post
+  - `wp_create_post` - Create new WordPress posts
+- **Pages API** (5 tools)
+  - `wp_pages_search` - Search and filter WordPress pages with pagination
+  - `wp_get_page` - Get a WordPress page by ID
+  - `wp_add_page` - Create a new WordPress page
+  - `wp_update_page` - Update an existing WordPress page
+  - `wp_delete_page` - Delete a WordPress page
+- **Post Metadata API** (5 tools)
+  - `wp_get_post_meta` - Get metadata for a WordPress post
+  - `wp_get_post_meta_value` - Get a specific post meta value by meta ID
+  - `wp_add_post_meta` - Add metadata to a WordPress post
+  - `wp_update_post_meta` - Update post metadata by meta ID
+  - `wp_delete_post_meta` - Delete post metadata by meta ID
+- **Page Metadata API** (5 tools)
+  - `wp_get_page_meta` - Get metadata for a WordPress page
+  - `wp_add_page_meta` - Add metadata to a WordPress page
+  - `wp_update_page_meta` - Update page metadata
+  - `wp_delete_page_meta` - Delete page metadata
+
+### Phase 3 (Taxonomy) - Complete in v1.6.0
+- **Categories API** (5 tools)
+  - `wp_list_categories` - List WordPress categories with optional filtering
+  - `wp_get_category` - Get a specific WordPress category by ID
+  - `wp_add_category` - Create a new WordPress category
+  - `wp_update_category` - Update an existing WordPress category
+  - `wp_delete_category` - Delete a WordPress category
+- **Tags API** (5 tools)
+  - `wp_list_tags` - List WordPress tags with optional filtering
+  - `wp_get_tag` - Get a specific WordPress tag by ID
+  - `wp_add_tag` - Create a new WordPress tag
+  - `wp_update_tag` - Update an existing WordPress tag
+  - `wp_delete_tag` - Delete a WordPress tag
+- **Taxonomy API** (4 tools)
+  - `wp_list_taxonomies` - List all registered taxonomies
+  - `wp_get_taxonomy` - Get a specific taxonomy by slug
+  - `wp_get_taxonomy_terms` - Get terms for a specific taxonomy
+  - `wp_get_post_taxonomies` - Get all taxonomies and terms for a specific post
 
 ## Installation
 
@@ -110,6 +134,17 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.6.0
+- **🚀 Phase 3 Complete - Taxonomy APIs**
+  - Added complete Categories management tools (5 tools)
+  - Implemented `wp_list_categories`, `wp_get_category`, `wp_add_category`, `wp_update_category`, `wp_delete_category`
+  - Added complete Tags management tools (5 tools)
+  - Implemented `wp_list_tags`, `wp_get_tag`, `wp_add_tag`, `wp_update_tag`, `wp_delete_tag`
+  - Added Taxonomy information and utility tools (4 tools)
+  - Implemented `wp_list_taxonomies`, `wp_get_taxonomy`, `wp_get_taxonomy_terms`, `wp_get_post_taxonomies`
+  - Enhanced tool organization with dedicated Taxonomy namespace
+  - Total tools count: 37+ MCP tools for comprehensive WordPress management
 
 ### 1.5.4
 - **🔧 Build Process Optimization**

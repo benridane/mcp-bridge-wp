@@ -127,6 +127,9 @@ class Plugin
 
         // Initialize Phase 2 Tools
         $this->initializePhase2Tools();
+
+        // Initialize Phase 3 Tools
+        $this->initializePhase3Tools();
     }
 
     /**
@@ -153,6 +156,19 @@ class Plugin
         }
 
         Logger::info('Phase 2 tools initialized (Posts and Pages)');
+    }
+
+    /**
+     * Initialize Phase 3 Tools (Taxonomy)
+     */
+    private function initializePhase3Tools(): void
+    {
+        // Initialize Taxonomy tools
+        new \McpBridge\Tools\Taxonomy\CategoriesTools();
+        new \McpBridge\Tools\Taxonomy\TagsTools();
+        new \McpBridge\Tools\Taxonomy\TaxonomyTools();
+
+        Logger::info('Phase 3 tools initialized (Taxonomy)');
     }
 
     /**
