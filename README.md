@@ -81,6 +81,21 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
   - `wp_get_taxonomy_terms` - Get terms for a specific taxonomy
   - `wp_get_post_taxonomies` - Get all taxonomies and terms for a specific post
 
+### Phase 4 (Media & Users) - Complete in v1.7.0
+- **Media API** (5 tools)
+  - `wp_list_media` - List media items from WordPress media library
+  - `wp_get_media` - Get a specific media item by ID
+  - `wp_upload_media` - Upload a new media file to WordPress
+  - `wp_update_media` - Update an existing media item
+  - `wp_delete_media` - Delete a media item from WordPress
+- **Users API** (6 tools)
+  - `wp_list_users` - List WordPress users with optional filtering
+  - `wp_get_user` - Get a specific WordPress user by ID
+  - `wp_add_user` - Create a new WordPress user
+  - `wp_update_user` - Update an existing WordPress user
+  - `wp_delete_user` - Delete a WordPress user
+  - `wp_get_current_user` - Get the currently authenticated user
+
 ## Installation
 
 1. Download the latest release
@@ -134,6 +149,24 @@ GPL v2 or later
 Contributions are welcome! Please read the contributing guidelines before submitting pull requests.
 
 ## Changelog
+
+### 1.7.1
+- **🐛 Media Upload Fix**
+  - Fixed `wp_upload_media` to support base64 encoded file uploads
+  - Added support for remote file uploads via MCP clients
+  - Improved file type detection and MIME type handling
+  - Added proper temporary file cleanup
+  - Enhanced error handling for upload failures
+
+### 1.7.0
+- **🚀 Phase 4 Complete - Media & Users APIs**
+  - Added complete Media management tools (5 tools)
+  - Implemented `wp_list_media`, `wp_get_media`, `wp_upload_media`, `wp_update_media`, `wp_delete_media`
+  - Custom handler for media upload functionality with local file support
+  - Added complete Users management tools (6 tools)
+  - Implemented `wp_list_users`, `wp_get_user`, `wp_add_user`, `wp_update_user`, `wp_delete_user`, `wp_get_current_user`
+  - Enhanced tool organization with dedicated Media and Users namespaces
+  - Total tools count: 48+ MCP tools for comprehensive WordPress management
 
 ### 1.6.0
 - **🚀 Phase 3 Complete - Taxonomy APIs**

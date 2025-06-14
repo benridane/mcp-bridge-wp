@@ -130,6 +130,9 @@ class Plugin
 
         // Initialize Phase 3 Tools
         $this->initializePhase3Tools();
+
+        // Initialize Phase 4 Tools
+        $this->initializePhase4Tools();
     }
 
     /**
@@ -169,6 +172,20 @@ class Plugin
         new \McpBridge\Tools\Taxonomy\TaxonomyTools();
 
         Logger::info('Phase 3 tools initialized (Taxonomy)');
+    }
+
+    /**
+     * Initialize Phase 4 Tools (Media and Users)
+     */
+    private function initializePhase4Tools(): void
+    {
+        // Initialize Media tools
+        new \McpBridge\Tools\Media\MediaTools();
+        
+        // Initialize Users tools
+        new \McpBridge\Tools\Users\UsersTools();
+
+        Logger::info('Phase 4 tools initialized (Media and Users)');
     }
 
     /**
