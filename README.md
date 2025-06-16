@@ -105,7 +105,7 @@ A WordPress plugin that provides MCP (Model Context Protocol) interface with App
 
 ## API Endpoints
 
-- **Primary MCP Endpoint (StreamableHTTP compliant)**: `POST /mcp`
+- **Primary MCP Endpoint (StreamableHTTP compliant)**: `POST /wp-json/mcp/v1/mcp`
 - **Legacy Endpoint**: `POST /wp-json/mcp/v1/rpc` (maintained for backward compatibility)
 - **Tools Manifest**: `GET /wp-json/mcp/v1/tools`
 
