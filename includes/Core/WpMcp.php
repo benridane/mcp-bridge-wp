@@ -338,6 +338,14 @@ class WpMcp
                 }
                 return $this->readResource($params['uri']);
             
+            // Prompt-related methods
+            case 'prompts/list':
+                return $this->getPromptsList();
+            
+            // Resource template methods
+            case 'resources/templates/list':
+                return $this->getResourceTemplatesList();
+            
             // Legacy methods for backward compatibility
             case 'getPosts':
                 return RegisterMcpTool::executeTool('wp_get_posts', $params);
@@ -356,7 +364,7 @@ class WpMcp
                     'available_methods' => [
                         'initialize', 'ping', 'notifications/initialized', 'initialized',
                         'tools/list', 'tools/call', 'resources/list', 'resources/read',
-                        'getPosts', 'createPost'
+                        'prompts/list', 'getPosts', 'createPost'
                     ]
                 ]);
                 
@@ -607,6 +615,34 @@ class WpMcp
         }
         
         return ['resources' => $resources];
+    }
+
+    /**
+     * Get list of available prompts
+     *
+     * @return array
+     */
+    private function getPromptsList(): array
+    {
+        Logger::debug('Getting prompts list - returning empty list');
+        
+        // Return empty prompts list to avoid client errors
+        // This satisfies MCP clients that expect prompts/list support
+        return ['prompts' => []];
+    }
+
+    /**
+     * Get list of resource templates
+     *
+     * @return array
+     */
+    private function getResourceTemplatesList(): array
+    {
+        Logger::debug('Getting resource templates list - returning empty list');
+        
+        // Return empty templates list to avoid client errors
+        // This satisfies MCP clients that expect resources/templates/list support
+        return ['resourceTemplates' => []];
     }
 
     /**
