@@ -52,3 +52,9 @@ tools/mcp-inspector-config.json
 config/development.php
 config/local.php
 *.local.php
+
+# Security assessments and internal documentation
+SECURITY_ASSESSMENT.md
+/docs/internal/
+/security-audits/
+/vulnerability-reports/

@@ -85,7 +85,9 @@ add_action('rest_api_init', function () {
     // Log registration result
     \McpBridge\Core\Logger::log('info', '/mcp/v1/mcp endpoint registration result: ' . ($mcp_result ? 'SUCCESS' : 'FAILED'));
     
-    // Add simple test endpoint for debugging
+    // Test endpoint is disabled for security reasons
+    // Uncomment the following code only for debugging purposes in development environment
+    /*
     $test_result = register_rest_route('mcp/v1', '/test', [
         'methods' => ['GET', 'POST'],
         'callback' => function ($request) {
@@ -101,6 +103,7 @@ add_action('rest_api_init', function () {
     ]);
     
     \McpBridge\Core\Logger::log('info', '/mcp/v1/test endpoint registration result: ' . ($test_result ? 'SUCCESS' : 'FAILED'));
+    */
     
     // Maintain existing endpoints for backward compatibility
     $rpc_result = register_rest_route('mcp/v1', '/rpc', [

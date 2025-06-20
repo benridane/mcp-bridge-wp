@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin core constants
-define('MCP_BRIDGE_VERSION', '1.7.2');
+define('MCP_BRIDGE_VERSION', '1.7.3');
 define('MCP_BRIDGE_PATH', plugin_dir_path(dirname(__FILE__)));
 define('MCP_BRIDGE_URL', plugin_dir_url(dirname(__FILE__)));
 define('MCP_BRIDGE_BASENAME', plugin_basename(dirname(__FILE__) . '/mcp-bridge.php'));
@@ -33,7 +33,7 @@ define('MCP_BRIDGE_LOG_ENABLED', true);
 define('MCP_BRIDGE_DEBUG_ADMIN', false); // Set to true only for development debugging
 
 // Security configuration
-define('MCP_BRIDGE_CAPABILITY_REQUIRED', 'edit_posts');
+define('MCP_BRIDGE_CAPABILITY_REQUIRED', 'manage_options');
 define('MCP_BRIDGE_RATE_LIMIT_ENABLED', true);
 define('MCP_BRIDGE_RATE_LIMIT_REQUESTS', 100);
 define('MCP_BRIDGE_RATE_LIMIT_WINDOW', 3600); // 1 hour
