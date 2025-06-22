@@ -153,24 +153,34 @@ class MediaTools extends ToolBase
         // wp_upload_media
         new RegisterMcpTool([
             'name' => 'wp_upload_media',
-            'description' => 'Upload a new media file to WordPress',
+            'description' => 'Upload a new media file to WordPress from file, base64 data, or URL',
             'type' => 'create',
             'handler' => [$this, 'uploadMedia'],
             'inputSchema' => [
                 'type' => 'object',
                 'properties' => [
+                    'source_type' => [
+                        'type' => 'string',
+                        'enum' => ['file', 'base64', 'url'],
+                        'description' => 'Type of source: file (path), base64 (data), or url (auto-detected if not specified)'
+                    ],
+                    'source' => [
+                        'type' => 'string',
+                        'description' => 'Source data: file path, base64 encoded content, or URL',
+                        'required' => true
+                    ],
                     'file_data' => [
                         'type' => 'string',
-                        'description' => 'Base64 encoded file content'
+                        'description' => '[Deprecated] Use source with source_type=base64 instead'
                     ],
                     'file_path' => [
                         'type' => 'string',
-                        'description' => 'Local file path (for server-side files only)'
+                        'description' => '[Deprecated] Use source with source_type=file instead'
                     ],
                     'filename' => [
                         'type' => 'string',
-                        'description' => 'Filename for the uploaded file',
-                        'required' => true
+                        'description' => 'Filename for the uploaded file (optional for URLs)',
+                        'required' => false
                     ],
                     'mime_type' => [
                         'type' => 'string',
@@ -197,7 +207,7 @@ class MediaTools extends ToolBase
                         'description' => 'The ID for the associated post of the attachment'
                     ]
                 ],
-                'required' => ['filename']
+                'required' => ['source']
             ]
         ]);
 
@@ -281,19 +291,48 @@ class MediaTools extends ToolBase
      */
     public function uploadMedia($arguments)
     {
-        // Base64データまたはファイルパスを受け入れる
+        // 新しいパラメータをサポート
+        $source = $arguments['source'] ?? null;
+        $source_type = $arguments['source_type'] ?? null;
+        
+        // 後方互換性のため古いパラメータもサポート
         $file_data = $arguments['file_data'] ?? null;
         $file_path = $arguments['file_path'] ?? null;
+        
+        // sourceが指定されていない場合は、古いパラメータを使用
+        if (empty($source)) {
+            if (!empty($file_data)) {
+                $source = $file_data;
+                $source_type = 'base64';
+            } elseif (!empty($file_path)) {
+                $source = $file_path;
+                $source_type = 'file';
+            }
+        }
+        
+        if (empty($source)) {
+            throw new \Exception('Source parameter is required');
+        }
+        
+        // source_typeが指定されていない場合、sourceの内容から自動判定
+        if (empty($source_type)) {
+            if (filter_var($source, FILTER_VALIDATE_URL)) {
+                // URLの場合
+                $source_type = 'url';
+                Logger::info('Auto-detected source type as URL', ['url' => $source]);
+            } elseif (file_exists($source) && is_readable($source)) {
+                // ローカルファイルの場合
+                $source_type = 'file';
+                Logger::info('Auto-detected source type as file', ['path' => $source]);
+            } else {
+                // それ以外はbase64とみなす
+                $source_type = 'base64';
+                Logger::info('Auto-detected source type as base64');
+            }
+        }
+        
         $filename = $arguments['filename'] ?? null;
         $mime_type = $arguments['mime_type'] ?? null;
-        
-        if (empty($file_data) && empty($file_path)) {
-            throw new \Exception('Either file_data (base64) or file_path is required');
-        }
-        
-        if (empty($filename)) {
-            throw new \Exception('Filename is required');
-        }
         
         // Include WordPress media handling functions
         require_once(ABSPATH . 'wp-admin/includes/media.php');
@@ -302,42 +341,120 @@ class MediaTools extends ToolBase
         
         // 一時ファイルを作成
         $temp_file = null;
+        $actual_file_path = null;
         
         try {
-            if (!empty($file_data)) {
-                // Base64データの場合
-                $decoded = base64_decode($file_data, true);
-                if ($decoded === false) {
-                    throw new \Exception('Invalid base64 data');
-                }
-                
-                // 一時ファイルに書き込み
-                $temp_file = wp_tempnam($filename);
-                if (file_put_contents($temp_file, $decoded) === false) {
-                    throw new \Exception('Failed to write temporary file');
-                }
-                $file_path = $temp_file;
-                
-                // MIMEタイプを検出
-                if (empty($mime_type)) {
-                    $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                    $mime_type = finfo_file($finfo, $temp_file);
-                    finfo_close($finfo);
-                }
-            } else {
-                // ローカルファイルパスの場合（既存の動作）
-                if (!file_exists($file_path)) {
-                    throw new \Exception("File not found: {$file_path}");
-                }
-                
-                if (!is_readable($file_path)) {
-                    throw new \Exception("File is not readable: {$file_path}");
-                }
-                
-                // ファイル名が指定されていない場合はパスから取得
-                if (empty($filename)) {
-                    $filename = basename($file_path);
-                }
+            switch ($source_type) {
+                case 'url':
+                    // URLから画像をダウンロード
+                    Logger::info('Downloading media from URL', ['url' => $source]);
+                    
+                    // URLの検証
+                    if (!filter_var($source, FILTER_VALIDATE_URL)) {
+                        throw new \Exception('Invalid URL provided');
+                    }
+                    
+                    // WordPressの関数を使用してリモートファイルを取得
+                    $response = wp_remote_get($source, [
+                        'timeout' => 30,
+                        'sslverify' => true,
+                        'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . get_bloginfo('url')
+                    ]);
+                    
+                    if (is_wp_error($response)) {
+                        throw new \Exception('Failed to download file: ' . $response->get_error_message());
+                    }
+                    
+                    $response_code = wp_remote_retrieve_response_code($response);
+                    if ($response_code !== 200) {
+                        throw new \Exception("HTTP error: {$response_code}");
+                    }
+                    
+                    $file_content = wp_remote_retrieve_body($response);
+                    if (empty($file_content)) {
+                        throw new \Exception('Downloaded file is empty');
+                    }
+                    
+                    // ファイル名が指定されていない場合はURLから取得
+                    if (empty($filename)) {
+                        $url_parts = parse_url($source);
+                        $filename = basename($url_parts['path']);
+                        
+                        // ファイル名が取得できない場合は、タイムスタンプベースの名前を生成
+                        if (empty($filename) || $filename === '/') {
+                            $filename = 'download-' . time();
+                        }
+                    }
+                    
+                    // Content-TypeヘッダーからMIMEタイプを取得
+                    if (empty($mime_type)) {
+                        $content_type = wp_remote_retrieve_header($response, 'content-type');
+                        if ($content_type) {
+                            // charset情報を除去
+                            $mime_type = explode(';', $content_type)[0];
+                        }
+                    }
+                    
+                    // 一時ファイルに書き込み
+                    $temp_file = wp_tempnam($filename);
+                    if (file_put_contents($temp_file, $file_content) === false) {
+                        throw new \Exception('Failed to write temporary file');
+                    }
+                    $actual_file_path = $temp_file;
+                    
+                    Logger::info('URL download successful', [
+                        'filename' => $filename,
+                        'size' => strlen($file_content),
+                        'mime_type' => $mime_type
+                    ]);
+                    break;
+                    
+                case 'base64':
+                    // Base64データの場合
+                    $decoded = base64_decode($source, true);
+                    if ($decoded === false) {
+                        throw new \Exception('Invalid base64 data');
+                    }
+                    
+                    if (empty($filename)) {
+                        throw new \Exception('Filename is required for base64 uploads');
+                    }
+                    
+                    // 一時ファイルに書き込み
+                    $temp_file = wp_tempnam($filename);
+                    if (file_put_contents($temp_file, $decoded) === false) {
+                        throw new \Exception('Failed to write temporary file');
+                    }
+                    $actual_file_path = $temp_file;
+                    
+                    // MIMEタイプを検出
+                    if (empty($mime_type)) {
+                        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                        $mime_type = finfo_file($finfo, $temp_file);
+                        finfo_close($finfo);
+                    }
+                    break;
+                    
+                case 'file':
+                    // ローカルファイルパスの場合
+                    if (!file_exists($source)) {
+                        throw new \Exception("File not found: {$source}");
+                    }
+                    
+                    if (!is_readable($source)) {
+                        throw new \Exception("File is not readable: {$source}");
+                    }
+                    
+                    $actual_file_path = $source;
+                    
+                    // ファイル名が指定されていない場合はパスから取得
+                    if (empty($filename)) {
+                        $filename = basename($source);
+                    }
+                    break;
+                    
+                default:
+                    throw new \Exception("Invalid source_type: {$source_type}");
             }
             
             // ファイルタイプをチェック
@@ -348,20 +465,56 @@ class MediaTools extends ToolBase
             }
             
             if (!$mime_type) {
-                $mime_type = mime_content_type($file_path);
+                $mime_type = mime_content_type($actual_file_path);
             }
             
             if (!$mime_type) {
                 throw new \Exception('Could not determine file type');
             }
             
+            // ファイル拡張子が無い場合、MIMEタイプから推測
+            if (strpos($filename, '.') === false && $mime_type) {
+                $mime_to_ext = [
+                    'image/jpeg' => '.jpg',
+                    'image/png' => '.png',
+                    'image/gif' => '.gif',
+                    'image/webp' => '.webp',
+                    'image/svg+xml' => '.svg',
+                    'video/mp4' => '.mp4',
+                    'video/webm' => '.webm',
+                    'audio/mpeg' => '.mp3',
+                    'audio/wav' => '.wav',
+                    'application/pdf' => '.pdf',
+                ];
+                
+                if (isset($mime_to_ext[$mime_type])) {
+                    $filename .= $mime_to_ext[$mime_type];
+                }
+            }
+            
+            // WordPressのアップロード制限をチェック
+            $allowed_mime_types = get_allowed_mime_types();
+            $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+            $is_allowed = false;
+            
+            foreach ($allowed_mime_types as $ext_pattern => $allowed_mime) {
+                if (preg_match('!^(' . $ext_pattern . ')$!i', $file_ext)) {
+                    $is_allowed = true;
+                    break;
+                }
+            }
+            
+            if (!$is_allowed) {
+                throw new \Exception("File type not allowed. Extension: {$file_ext}, MIME: {$mime_type}");
+            }
+            
             // Prepare upload
             $upload_file = [
                 'name' => $filename,
                 'type' => $mime_type,
-                'tmp_name' => $file_path,
+                'tmp_name' => $actual_file_path,
                 'error' => 0,
-                'size' => filesize($file_path)
+                'size' => filesize($actual_file_path)
             ];
 
             // Handle the upload
